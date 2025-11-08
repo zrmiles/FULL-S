@@ -5,8 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:backend": "uvicorn app:app --reload --port ${PORT:-8000} --app-dir backend",
+    "dev:all": "concurrently -k -n FRONT,API -c blue,green \"npm:dev\" \"npm:dev:backend\"",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "postcss": "tsx postcss.config.ts"
   },
   "dependencies": {
     "lucide-react": "^0.451.0",
@@ -14,12 +17,17 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@types/postcss-load-config": "^2.0.1",
     "@types/react": "^18.2.66",
     "@types/react-dom": "^18.2.22",
     "@vitejs/plugin-react": "^5.0.3",
-    "autoprefixer": "^10.4.20",
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^9.2.1",
     "postcss": "^8.4.41",
-    "tailwindcss": "^3.4.10",
+    "tailwindcss": "^3.4.18",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.3.3",
     "vite": "^5.4.2"
   }
 }
