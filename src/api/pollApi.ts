@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:8000';
+export const API_BASE_URL = 'http://localhost:8000';
 const absoluteUrl = (path?: string | null): string | null => {
   if (!path) return null;
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
@@ -53,19 +53,22 @@ export interface VoteResult {
 }
 
 export class PollApiService {
+  private static async rawFetch(endpoint: string, options: RequestInit = {}) {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+    }
+    return response;
+  }
+
   private static async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await this.rawFetch(endpoint, {
       headers: {
         'Content-Type': 'application/json',
         ...options.headers,
       },
       ...options,
     });
-
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
-    }
-
     return response.json();
   }
 

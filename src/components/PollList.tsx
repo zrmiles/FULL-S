@@ -17,6 +17,7 @@ export function PollList({ onViewChange, onPollSelect, onResultsSelect }: PollLi
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const showCreateButton = filter !== 'completed';
 
   useEffect(() => {
     loadPolls();
@@ -74,12 +75,17 @@ export function PollList({ onViewChange, onPollSelect, onResultsSelect }: PollLi
     }
   };
 
-  const filteredPolls = polls.filter((poll) => {
-    const status = getPollStatus(poll).state;
-    if (filter === 'all') return true;
-    if (filter === 'active') return status === 'active';
-    return status === 'completed';
-  });
+  const orderedPolls = polls
+    .map((poll) => ({ poll, status: getPollStatus(poll) }))
+    .sort((a, b) => {
+      const order = { active: 0, upcoming: 1, completed: 2 } as const;
+      return order[a.status.state] - order[b.status.state];
+    })
+    .filter(({ status }) => {
+      if (filter === 'all') return true;
+      if (filter === 'active') return status.state === 'active';
+      return status.state === 'completed';
+    });
 
   if (loading) {
     return (
@@ -107,10 +113,10 @@ export function PollList({ onViewChange, onPollSelect, onResultsSelect }: PollLi
     <section className="grid gap-4">
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="flex items-center gap-2 text-xl font-bold">
+          <h2 className="flex items-center gap-2 text-xl font-bold text-gray-900 dark:text-gray-100">
             <PieChart className="h-5 w-5" /> Опросы
           </h2>
-          <p className="mt-0.5 text-sm text-gray-600">Активные и завершённые</p>
+          <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-400">Активные и завершённые</p>
         </div>
       </div>
 
@@ -122,7 +128,7 @@ export function PollList({ onViewChange, onPollSelect, onResultsSelect }: PollLi
         ].map(({ key, label }) => (
           <button
             key={key}
-            className={`rounded-full border px-3 py-1 text-sm ${filter === key ? 'border-blue-500 text-blue-600' : 'border-gray-200 hover:bg-gray-50'}`}
+            className={`rounded-full border px-3 py-1 text-sm ${filter === key ? 'border-blue-500 text-blue-600 dark:text-blue-300' : 'border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800'}`}
             onClick={() => setFilter(key as typeof filter)}
           >
             {label}
@@ -130,13 +136,12 @@ export function PollList({ onViewChange, onPollSelect, onResultsSelect }: PollLi
         ))}
       </div>
 
-      {filteredPolls.length === 0 ? (
+      {orderedPolls.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
           <p>Опросов в этой категории пока нет</p>
         </div>
       ) : (
-        filteredPolls.map((poll) => {
-          const status = getPollStatus(poll);
+        orderedPolls.map(({ poll, status }) => {
           return (
             <PollCard
               key={poll.id}
@@ -152,14 +157,16 @@ export function PollList({ onViewChange, onPollSelect, onResultsSelect }: PollLi
         })
       )}
 
-      <div className="mt-2 flex justify-end">
-        <button
-          onClick={() => onViewChange("organizer")}
-          className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm transition hover:bg-gray-50"
-        >
-          <Plus className="h-4 w-4" /> Создать опрос
-        </button>
-      </div>
+      {showCreateButton && (
+        <div className="mt-2 flex justify-end">
+          <button
+            onClick={() => onViewChange("organizer")}
+            className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+          >
+            <Plus className="h-4 w-4" /> Создать опрос
+          </button>
+        </div>
+      )}
     </section>
   );
 }

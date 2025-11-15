@@ -3,10 +3,12 @@ from collections import defaultdict
 import logging
 import os
 import shutil
+import io
+import csv
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Response, Depends, Header, Request, UploadFile, File
+from fastapi import FastAPI, HTTPException, Response, Depends, Header, Request, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
@@ -445,7 +447,18 @@ async def upload_avatar(file: UploadFile = File(...), db: Session = Depends(get_
     ext = ".jpg"
     if file.content_type == "image/png":
         ext = ".png"
-    filename = f"{user.id}{ext}"
+    # remove previous avatar file if exists
+    if user.avatar_url:
+        old_path = user.avatar_url.split("?")[0]
+        old_name = Path(old_path).name
+        if old_name:
+            old_file = AVATAR_DIR / old_name
+            if old_file.exists():
+                try:
+                    old_file.unlink()
+                except Exception:
+                    logger.warning("Failed to remove old avatar %s", old_file)
+    filename = f"{user.id}_{uuid.uuid4().hex}{ext}"
     path = AVATAR_DIR / filename
     with path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -658,7 +671,11 @@ def vote(poll_id: str, body: VoteRequest, db: Session = Depends(get_db)):
 
 
 @app.get("/polls/{poll_id}/results", response_model=VoteResult)
-def get_results(poll_id: str, db: Session = Depends(get_db)):
+def get_results(
+    poll_id: str,
+    db: Session = Depends(get_db),
+    format: Optional[str] = Query(default=None),
+):
     poll = db.query(PollModel).filter(PollModel.id == poll_id).first()
     if not poll:
         raise HTTPException(status_code=404, detail="Poll not found")
@@ -696,7 +713,7 @@ def get_results(poll_id: str, db: Session = Depends(get_db)):
             voter_map[variant_id].append(
                 PublicVoter(
                     id=user_id,
-                    username=username,
+                    username=name or username,
                     name=name,
                     avatarUrl=avatar,
                 )
@@ -713,7 +730,7 @@ def get_results(poll_id: str, db: Session = Depends(get_db)):
             )
         )
     
-    return VoteResult(
+    result_payload = VoteResult(
         pollId=poll_id, 
         total=total, 
         results=items,
@@ -721,6 +738,33 @@ def get_results(poll_id: str, db: Session = Depends(get_db)):
         totalVoters=unique_voters,
         participationRate=100.0  # Пока всегда 100%, можно добавить логику расчета
     )
+    if format == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Вариант", "Количество голосов", "Голосовали"])
+        for item in items:
+            if poll.is_anonymous or not item.voters:
+                voters_str = "—"
+            else:
+                names = [
+                    (v.name or v.username or "").strip()
+                    for v in item.voters
+                    if (v.name or v.username)
+                ]
+                voters_str = ", ".join(names) if names else "—"
+            writer.writerow([item.label, item.count, voters_str])
+        csv_content = output.getvalue()
+        safe_title = "".join(c for c in (poll.title or "poll") if c.isalnum() or c in (" ", "_", "-")).strip().replace(" ", "_")
+        filename = f'{safe_title or "poll"}-results.csv'
+        ascii_filename = filename.encode("ascii", "ignore").decode() or "results.csv"
+        return StreamingResponse(
+            iter([csv_content]),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f'attachment; filename="{ascii_filename}"'
+            },
+        )
+    return result_payload
 
 
 @app.delete("/polls/{poll_id}")

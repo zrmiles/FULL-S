@@ -54,7 +54,7 @@ export function PollCreator({ onCreatePoll, onCancel }: PollCreatorProps): JSX.E
   };
 
   return (
-    <div className="rounded-2xl bg-white p-5 shadow-sm">
+    <div className="rounded-2xl bg-white p-5 shadow-sm dark:bg-gray-800 dark:text-gray-100">
       <div className="grid gap-3 md:grid-cols-2">
         <LabelledInput
           label="Заголовок"
@@ -79,9 +79,9 @@ export function PollCreator({ onCreatePoll, onCancel }: PollCreatorProps): JSX.E
       />
 
       <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <fieldset className="rounded-xl border border-gray-200 p-3">
-          <legend className="px-1 text-sm text-gray-500">Тип голосования</legend>
-          <label className="flex items-center gap-2 p-1">
+        <fieldset className="rounded-xl border border-gray-200 p-3 dark:border-gray-700">
+          <legend className="px-1 text-sm text-gray-500 dark:text-gray-300">Тип голосования</legend>
+          <label className="flex items-center gap-2 p-1 text-gray-700 dark:text-gray-200">
             <input
               type="radio"
               name="type"
@@ -91,7 +91,7 @@ export function PollCreator({ onCreatePoll, onCancel }: PollCreatorProps): JSX.E
             />
             Один вариант
           </label>
-          <label className="flex items-center gap-2 p-1">
+          <label className="flex items-center gap-2 p-1 text-gray-700 dark:text-gray-200">
             <input
               type="radio"
               name="type"
@@ -103,11 +103,11 @@ export function PollCreator({ onCreatePoll, onCancel }: PollCreatorProps): JSX.E
           </label>
           {isMulti && (
             <div className="mt-2 flex items-center gap-2">
-              <span className="text-sm text-gray-500">Макс. выбранных:</span>
+              <span className="text-sm text-gray-500 dark:text-gray-300">Макс. выбранных:</span>
               <input
                 type="number"
                 min={1}
-                className="w-20 rounded-lg border border-gray-200 px-3 py-2"
+                className="w-20 rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
                 value={maxSelections}
                 onChange={(e) => setMaxSelections(parseInt(e.target.value || "1", 10))}
               />
@@ -115,21 +115,21 @@ export function PollCreator({ onCreatePoll, onCancel }: PollCreatorProps): JSX.E
           )}
         </fieldset>
 
-        <fieldset className="rounded-xl border border-gray-200 p-3">
-          <legend className="px-1 text-sm text-gray-500">Ограничения и доступ</legend>
-          <label className="flex items-center gap-2 p-1">
+        <fieldset className="rounded-xl border border-gray-200 p-3 dark:border-gray-700">
+          <legend className="px-1 text-sm text-gray-500 dark:text-gray-300">Ограничения и доступ</legend>
+          <label className="flex items-center gap-2 p-1 text-gray-700 dark:text-gray-200">
             <input type="checkbox" defaultChecked className="accent-blue-600" />
             1 голос на пользователя
           </label>
-          <label className="flex items-center gap-2 p-1">
+          <label className="flex items-center gap-2 p-1 text-gray-700 dark:text-gray-200">
             <input type="checkbox" className="accent-blue-600" />
             Результаты после дедлайна
           </label>
           
-          <div className="mt-3 border-t border-gray-200 pt-3">
-            <label className="text-sm font-medium text-gray-700 mb-2 block">Тип голосования</label>
+          <div className="mt-3 border-t border-gray-200 pt-3 dark:border-gray-700">
+            <label className="text-sm font-medium text-gray-700 mb-2 block dark:text-gray-200">Тип голосования</label>
             <div className="space-y-2">
-              <label className="flex items-center gap-2 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+              <label className="flex items-center gap-2 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer dark:border-gray-700 dark:hover:bg-gray-700">
                 <input
                   type="radio"
                   name="anonymity"
@@ -138,11 +138,11 @@ export function PollCreator({ onCreatePoll, onCancel }: PollCreatorProps): JSX.E
                   className="accent-blue-600"
                 />
                 <div>
-                  <div className="font-medium text-gray-900">Анонимное</div>
-                  <div className="text-xs text-gray-500">Голоса скрыты, видны только результаты</div>
+                  <div className="font-medium text-gray-900 dark:text-gray-100">Анонимное</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">Голоса скрыты, видны только результаты</div>
                 </div>
               </label>
-              <label className="flex items-center gap-2 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+              <label className="flex items-center gap-2 p-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer dark:border-gray-700 dark:hover:bg-gray-700">
                 <input
                   type="radio"
                   name="anonymity"
@@ -151,8 +151,8 @@ export function PollCreator({ onCreatePoll, onCancel }: PollCreatorProps): JSX.E
                   className="accent-blue-600"
                 />
                 <div>
-                  <div className="font-medium text-gray-900">Публичное</div>
-                  <div className="text-xs text-gray-500">Можно видеть, кто за что проголосовал</div>
+                  <div className="font-medium text-gray-900 dark:text-gray-100">Публичное</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">Можно видеть, кто за что проголосовал</div>
                 </div>
               </label>
             </div>
@@ -160,11 +160,11 @@ export function PollCreator({ onCreatePoll, onCancel }: PollCreatorProps): JSX.E
         </fieldset>
       </div>
 
-      <div className="mt-4 rounded-xl border border-gray-200 p-3">
+      <div className="mt-4 rounded-xl border border-gray-200 p-3 dark:border-gray-700">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-sm text-gray-500">Варианты</span>
           <button
-            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-sm"
+            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-sm dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-700"
             onClick={() => setVariants([...variants, `Вариант ${variants.length + 1}`])}
           >
             <Plus className="h-4 w-4" /> Добавить
@@ -173,11 +173,11 @@ export function PollCreator({ onCreatePoll, onCancel }: PollCreatorProps): JSX.E
         <div className="grid gap-2">
           {variants.map((variant, idx) => (
             <div key={idx} className="flex items-center gap-2">
-              <div className="grid h-8 w-8 place-items-center rounded-lg bg-gray-100 text-gray-500">
+              <div className="grid h-8 w-8 place-items-center rounded-lg bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-200">
                 <Circle className="h-4 w-4" />
               </div>
               <input
-                className="flex-1 rounded-lg border border-gray-200 px-3 py-2"
+                className="flex-1 rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100"
                 value={variant}
                 onChange={(e) =>
                   setVariants((arr) => arr.map((x, i) => (i === idx ? e.target.value : x)))
@@ -224,14 +224,14 @@ function LabelledInput({
 }: LabelledInputProps): JSX.Element {
   return (
     <label className={`grid gap-1 ${className}`}>
-      <span className="text-sm text-gray-600">{label}</span>
+      <span className="text-sm text-gray-600 dark:text-gray-300">{label}</span>
       <input
         type={type}
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
         min={min}
-        className="rounded-lg border border-gray-200 px-3 py-2 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+        className="rounded-lg border border-gray-200 px-3 py-2 placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
       />
     </label>
   );

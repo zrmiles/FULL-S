@@ -111,19 +111,19 @@ export default function SurveyWireframeApp(): JSX.Element {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
+    <div className="min-h-screen bg-gray-50 text-gray-900 transition-colors dark:bg-gray-900 dark:text-gray-100">
       <AppBar onNav={handleNavigation} current={view} />
 
       <main className="mx-auto w-full max-w-screen-md px-4 py-6">
         {view === "login" && (
-          <section className="mx-auto max-w-md rounded-2xl bg-white p-6 shadow-sm">
+          <section className="mx-auto max-w-md rounded-2xl bg-white p-6 shadow-sm dark:bg-gray-800 dark:text-gray-100">
             <div className="mb-6 flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-100 text-blue-600">
+              <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-200">
                 <ShieldCheck />
               </div>
               <div>
-                <h1 className="text-xl font-bold">Добро пожаловать</h1>
-                <p className="text-sm text-gray-500">
+                <h1 className="text-xl font-bold text-gray-900 dark:text-gray-50">Добро пожаловать</h1>
+                <p className="text-sm text-gray-500 dark:text-gray-300">
                   Ваш голос анонимен. Система проверяет уникальность (1 пользователь = 1 голос).
                 </p>
               </div>
@@ -131,7 +131,7 @@ export default function SurveyWireframeApp(): JSX.Element {
 
             <LoginForm onSuccess={() => setView('home')} />
 
-            <p className="mt-6 text-center text-xs text-gray-500">
+            <p className="mt-6 text-center text-xs text-gray-500 dark:text-gray-400">
               Нажимая «Войти», вы соглашаетесь с{" "}
               <a className="underline" href="#" onClick={(e) => e.preventDefault()}>
                 политикой конфиденциальности
@@ -156,14 +156,14 @@ export default function SurveyWireframeApp(): JSX.Element {
                 <h2 className="flex items-center gap-2 text-xl font-bold">
                   <Clock className="h-5 w-5" /> {currentPoll.title}
                 </h2>
-                <p className="mt-0.5 text-sm text-gray-600">
+                <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-300">
                   Дедлайн: {currentPoll.deadlineISO ? formatDate(currentPoll.deadlineISO) : 'Не указан'}
                 </p>
               </div>
             </div>
 
-            <div className="rounded-2xl bg-white p-5 shadow-sm">
-              <p className="mb-3 text-sm text-gray-600">{currentPoll.description || 'Описание отсутствует'}</p>
+            <div className="rounded-2xl bg-white p-5 shadow-sm dark:bg-gray-800 dark:text-gray-100">
+              <p className="mb-3 text-sm text-gray-600 dark:text-gray-300">{currentPoll.description || 'Описание отсутствует'}</p>
               <AnonymityHint isAnonymous={currentPoll.isAnonymous} />
 
               <fieldset className="mt-4 grid gap-2" aria-label="Варианты ответа">
@@ -173,8 +173,8 @@ export default function SurveyWireframeApp(): JSX.Element {
                   return (
                     <label
                       key={variant.id}
-                      className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition hover:bg-gray-50 ${
-                        isSelected ? "border-blue-500 bg-blue-50" : "border-gray-200"
+                      className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700 ${
+                        isSelected ? "border-blue-500 bg-blue-50 dark:bg-blue-900/30" : ""
                       }`}
                     >
                       <input
@@ -192,7 +192,7 @@ export default function SurveyWireframeApp(): JSX.Element {
               </fieldset>
 
               <div className="mt-4 flex items-center justify-between gap-3">
-                <small className="text-xs text-gray-500">
+                <small className="text-xs text-gray-500 dark:text-gray-300">
                   Тип: {currentPoll.type === 'single' ? 'один вариант' : 'несколько вариантов'}, 1 голос на пользователя
                   {currentPoll.deadlineISO && (
                     <>
@@ -214,8 +214,8 @@ export default function SurveyWireframeApp(): JSX.Element {
         )}
 
         {view === "success" && (
-          <section className="mx-auto max-w-md rounded-2xl bg-white p-8 text-center shadow-sm">
-            <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-full bg-green-100 text-green-600">
+          <section className="mx-auto max-w-md rounded-2xl bg-white p-8 text-center shadow-sm dark:bg-gray-800">
+            <div className="mx-auto mb-4 grid h-16 w-16 place-items-center rounded-full bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-200">
               <CheckCircle2 className="h-8 w-8" />
             </div>
             <h2 className="mb-1 text-xl font-bold">Голос учтён</h2>
@@ -238,6 +238,7 @@ export default function SurveyWireframeApp(): JSX.Element {
             results={results}
             pollTitle={currentPoll.title}
             onBack={() => setView("home")}
+            pollId={currentPoll.id}
           />
         )}
 
@@ -265,11 +266,11 @@ export default function SurveyWireframeApp(): JSX.Element {
       {/* Confirm modal */}
       {showConfirm && currentPoll && (
         <div role="dialog" aria-modal className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-800 dark:text-gray-100">
             <h3 className="mb-1 text-lg font-semibold">Подтвердить голос?</h3>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-600 dark:text-gray-300">
                 Вы выбрали:{" "}
-                <span className="font-medium text-gray-900">
+                <span className="font-medium text-gray-900 dark:text-gray-100">
                   {currentPoll.variants
                     .filter((v) => selectedChoices.includes(v.id))
                     .map((v) => v.label)
@@ -279,7 +280,7 @@ export default function SurveyWireframeApp(): JSX.Element {
               </p>
             <div className="mt-5 flex justify-end gap-2">
               <button 
-                className="rounded-xl border border-gray-200 px-4 py-2" 
+                className="rounded-xl border border-gray-200 px-4 py-2 dark:border-gray-600 dark:text-gray-100" 
                 onClick={() => setShowConfirm(false)}
               >
                 Отмена
@@ -405,23 +406,23 @@ function LoginForm({ onSuccess }: { onSuccess: () => void }): JSX.Element {
       </div>
       <label className="grid gap-1">
         <span className="text-sm text-gray-600">Никнейм</span>
-        <input className="rounded-lg border border-gray-200 px-3 py-2" value={username} onChange={e=>setUsername(e.target.value)} />
+        <input className="rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" value={username} onChange={e=>setUsername(e.target.value)} />
       </label>
       {mode==='register' && (
         <>
           <label className="grid gap-1">
             <span className="text-sm text-gray-600">E-mail</span>
-            <input className="rounded-lg border border-gray-200 px-3 py-2" value={email} onChange={e=>setEmail(e.target.value)} />
+            <input className="rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" value={email} onChange={e=>setEmail(e.target.value)} />
           </label>
           <label className="grid gap-1">
             <span className="text-sm text-gray-600">Имя</span>
-            <input className="rounded-lg border border-gray-200 px-3 py-2" value={name} onChange={e=>setName(e.target.value)} />
+            <input className="rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" value={name} onChange={e=>setName(e.target.value)} />
           </label>
         </>
       )}
       <label className="grid gap-1">
         <span className="text-sm text-gray-600">Пароль</span>
-        <input type="password" className="rounded-lg border border-gray-200 px-3 py-2" value={password} onChange={e=>setPassword(e.target.value)} />
+        <input type="password" className="rounded-lg border border-gray-200 px-3 py-2 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100" value={password} onChange={e=>setPassword(e.target.value)} />
       </label>
       <button
         onClick={submit}
