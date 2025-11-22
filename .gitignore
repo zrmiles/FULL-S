@@ -1,0 +1,20 @@
+# dependencies
+node_modules
+
+# production builds
+dist
+*.log
+
+# environment
+backend/.env
+
+# python
+backend/venv
+__pycache__/
+*.pyc
+
+# OS / editors
+.DS_Store
+*.swp
+*.swo
+

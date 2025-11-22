@@ -58,7 +58,7 @@ export function PollCreator({ onCreatePoll, onCancel }: PollCreatorProps): JSX.E
       <div className="grid gap-3 md:grid-cols-2">
         <LabelledInput
           label="Заголовок"
-          value={title}
+          value={title}   
           onChange={setTitle}
           placeholder="Напр. Выбор старосты"
         />

@@ -2,7 +2,6 @@ from typing import List, Optional, Dict
 from collections import defaultdict
 import logging
 import os
-import shutil
 import io
 import csv
 from pathlib import Path
@@ -18,7 +17,9 @@ from database import get_db, create_tables
 from models import Poll as PollModel, PollVariant, Vote as VoteModel, User as UserModel
 from passlib.context import CryptContext
 from sqlalchemy.exc import IntegrityError, NoSuchTableError, OperationalError
-from sqlalchemy import text, inspect
+from sqlalchemy import text, inspect, or_
+from minio import Minio
+from minio.error import S3Error
 class PollCreate(BaseModel):
     title: str
     description: Optional[str] = None
@@ -87,6 +88,33 @@ AVATAR_DIR = STATIC_DIR / "avatars"
 STATIC_DIR.mkdir(exist_ok=True)
 AVATAR_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
+MINIO_BUCKET = os.getenv("MINIO_BUCKET", "avatars")
+MINIO_USE_SSL = os.getenv("MINIO_USE_SSL", "false").lower() in {"1", "true", "yes"}
+MINIO_PUBLIC_URL = os.getenv("MINIO_PUBLIC_URL")
+MINIO_CLIENT: Optional[Minio] = None
+
+if MINIO_ENDPOINT and MINIO_ACCESS_KEY and MINIO_SECRET_KEY:
+    try:
+        MINIO_CLIENT = Minio(
+            MINIO_ENDPOINT,
+            access_key=MINIO_ACCESS_KEY,
+            secret_key=MINIO_SECRET_KEY,
+            secure=MINIO_USE_SSL,
+        )
+        if not MINIO_PUBLIC_URL:
+            scheme = "https" if MINIO_USE_SSL else "http"
+            MINIO_PUBLIC_URL = f"{scheme}://{MINIO_ENDPOINT}"
+        MINIO_PUBLIC_URL = MINIO_PUBLIC_URL.rstrip("/")
+    except Exception:
+        logger.exception("Failed to initialize MinIO client")
+        MINIO_CLIENT = None
+else:
+    if MINIO_ENDPOINT or MINIO_ACCESS_KEY or MINIO_SECRET_KEY:
+        logger.warning("MinIO configuration is incomplete; avatar uploads are disabled")
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -260,6 +288,42 @@ def ensure_vote_constraints(db: Session) -> None:
             text('ALTER TABLE votes ADD CONSTRAINT unique_user_poll_variant UNIQUE (poll_id, user_id, variant_id)')
         )
         db.commit()
+
+
+def ensure_minio_bucket() -> None:
+    if not MINIO_CLIENT:
+        return
+    try:
+        if not MINIO_CLIENT.bucket_exists(MINIO_BUCKET):
+            MINIO_CLIENT.make_bucket(MINIO_BUCKET)
+            logger.info("Created MinIO bucket %s", MINIO_BUCKET)
+    except S3Error:
+        logger.exception("Failed to ensure MinIO bucket %s", MINIO_BUCKET)
+
+
+def remove_existing_avatar_resource(avatar_url: Optional[str]) -> None:
+    if not avatar_url:
+        return
+    if avatar_url.startswith("/static/avatars/"):
+        old_path = avatar_url.split("?")[0]
+        old_name = Path(old_path).name
+        if old_name:
+            old_file = AVATAR_DIR / old_name
+            if old_file.exists():
+                try:
+                    old_file.unlink()
+                except Exception:
+                    logger.warning("Failed to remove legacy avatar %s", old_file)
+        return
+    if MINIO_CLIENT and MINIO_BUCKET:
+        marker = f"/{MINIO_BUCKET}/"
+        if marker in avatar_url:
+            object_name = avatar_url.split(marker, 1)[1]
+            if object_name:
+                try:
+                    MINIO_CLIENT.remove_object(MINIO_BUCKET, object_name)
+                except S3Error:
+                    logger.warning("Failed to remove old MinIO avatar object %s", object_name)
 # ===== Users API =====
 
 class UserCreate(BaseModel):
@@ -396,7 +460,12 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
         create_tables()
         ensure_user_columns(db)
         ensure_vote_constraints(db)
-        user = db.query(UserModel).filter(UserModel.username == body.username).first()
+        identifier = body.username.strip()
+        user = (
+            db.query(UserModel)
+            .filter(or_(UserModel.username == identifier, UserModel.email == identifier))
+            .first()
+        )
         if not user or not verify_password(body.password, user.password_hash):
             raise HTTPException(status_code=401, detail="Invalid credentials")
         logger.info("User %s logged in", user.id)
@@ -444,25 +513,30 @@ async def upload_avatar(file: UploadFile = File(...), db: Session = Depends(get_
     user = _require_user_from_header(db, x_user_id)
     if file.content_type not in {"image/png", "image/jpeg", "image/jpg"}:
         raise HTTPException(status_code=400, detail="Unsupported file type")
-    ext = ".jpg"
-    if file.content_type == "image/png":
-        ext = ".png"
-    # remove previous avatar file if exists
-    if user.avatar_url:
-        old_path = user.avatar_url.split("?")[0]
-        old_name = Path(old_path).name
-        if old_name:
-            old_file = AVATAR_DIR / old_name
-            if old_file.exists():
-                try:
-                    old_file.unlink()
-                except Exception:
-                    logger.warning("Failed to remove old avatar %s", old_file)
-    filename = f"{user.id}_{uuid.uuid4().hex}{ext}"
-    path = AVATAR_DIR / filename
-    with path.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    user.avatar_url = f"/static/avatars/{filename}"
+    if not MINIO_CLIENT or not MINIO_PUBLIC_URL:
+        raise HTTPException(status_code=503, detail="Avatar storage is not configured")
+
+    ext = ".png" if file.content_type == "image/png" else ".jpg"
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    object_name = f"{user.id}/{uuid.uuid4().hex}{ext}"
+    remove_existing_avatar_resource(user.avatar_url)
+    try:
+        MINIO_CLIENT.put_object(
+            MINIO_BUCKET,
+            object_name,
+            io.BytesIO(data),
+            length=len(data),
+            content_type=file.content_type,
+        )
+    except S3Error:
+        logger.exception("Failed to upload avatar to MinIO for user %s", user.id)
+        raise HTTPException(status_code=502, detail="Failed to store avatar")
+
+    public_url = f"{MINIO_PUBLIC_URL}/{MINIO_BUCKET}/{object_name}"
+    user.avatar_url = public_url
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -804,6 +878,7 @@ def startup_event():
                 db_gen.close()
             except Exception:
                 pass
+        ensure_minio_bucket()
     except OperationalError:
         logger.exception("Database initialization failed: database unavailable")
     except Exception:
