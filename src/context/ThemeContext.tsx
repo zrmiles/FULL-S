@@ -21,6 +21,7 @@ const getInitialTheme = (): Theme => {
     : 'light';
 };
 
+//изменение темы(светлая и темная, в профиле)
 export function ThemeProvider({ children }: { children: React.ReactNode }): JSX.Element {
   const [theme, setThemeState] = useState<Theme>(getInitialTheme);
 

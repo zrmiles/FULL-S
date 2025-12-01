@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Literal
 from collections import defaultdict
 import logging
 import os
@@ -17,7 +17,7 @@ from database import get_db, create_tables
 from models import Poll as PollModel, PollVariant, Vote as VoteModel, User as UserModel
 from passlib.context import CryptContext
 from sqlalchemy.exc import IntegrityError, NoSuchTableError, OperationalError
-from sqlalchemy import text, inspect, or_
+from sqlalchemy import text, inspect, or_, func
 from minio import Minio
 from minio.error import S3Error
 class PollCreate(BaseModel):
@@ -41,6 +41,11 @@ class Poll(BaseModel):
     maxSelections: int = 1
     isAnonymous: bool = True
     ownerUserId: Optional[str] = None
+
+
+class PollListResponse(BaseModel):
+    items: List[Poll]
+    total: int
 
 
 class VoteRequest(BaseModel):
@@ -588,23 +593,59 @@ def health():
     return {"status": "ok", "time": datetime.utcnow().isoformat()}
 
 
-@app.get("/polls", response_model=List[Poll])
-def list_polls(db: Session = Depends(get_db)):
-    polls = db.query(PollModel).all()
-    return [
-        Poll(
-            id=poll.id,
-            title=poll.title,
-            description=poll.description,
-            deadlineISO=poll.deadline_iso.isoformat() if poll.deadline_iso else None,
-            type=poll.type,
-            variants=[{"id": v.id, "label": v.label} for v in poll.variants],
-            maxSelections=poll.max_selections,
-            isAnonymous=poll.is_anonymous,
-            ownerUserId=poll.owner_user_id
+POLL_DEFAULT_LIMIT = 8
+POLL_MAX_LIMIT = 50
+
+
+@app.get("/polls", response_model=PollListResponse)
+def list_polls(
+    status: Literal["all", "active", "completed", "upcoming"] = Query("all"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(POLL_DEFAULT_LIMIT, ge=1, le=POLL_MAX_LIMIT),
+    db: Session = Depends(get_db),
+):
+    offset = (page - 1) * limit
+    now = datetime.now(timezone.utc)
+    base_query = db.query(PollModel)
+    if status == "active":
+        base_query = base_query.filter(
+            PollModel.deadline_iso.isnot(None),
+            PollModel.deadline_iso > now,
         )
-        for poll in polls
-    ]
+    elif status == "completed":
+        base_query = base_query.filter(
+            PollModel.deadline_iso.isnot(None),
+            PollModel.deadline_iso <= now,
+        )
+    elif status == "upcoming":
+        base_query = base_query.filter(PollModel.deadline_iso.is_(None))
+
+    total = base_query.count()
+    polls = (
+        base_query
+        .order_by(func.coalesce(PollModel.deadline_iso, datetime.max))
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    payload = []
+    for poll in polls:
+        payload.append(
+            Poll(
+                id=poll.id,
+                title=poll.title,
+                description=poll.description,
+                deadlineISO=poll.deadline_iso.isoformat() if poll.deadline_iso else None,
+                type=poll.type,
+                variants=[{"id": v.id, "label": v.label} for v in poll.variants],
+                maxSelections=poll.max_selections,
+                isAnonymous=poll.is_anonymous,
+                ownerUserId=poll.owner_user_id,
+            )
+        )
+
+    return PollListResponse(items=payload, total=total)
 
 
 @app.post("/polls", response_model=Poll, status_code=201)

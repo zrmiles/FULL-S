@@ -71,6 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }): JSX.E
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+// функкция авторизации пользователя
 export function useAuth(): AuthContextType {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');

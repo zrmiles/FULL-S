@@ -52,6 +52,11 @@ export interface VoteResult {
   participationRate: number;
 }
 
+export interface PollsResponse {
+  items: Poll[];
+  total: number;
+}
+
 export class PollApiService {
   private static async rawFetch(endpoint: string, options: RequestInit = {}) {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
@@ -72,8 +77,23 @@ export class PollApiService {
     return response.json();
   }
 
-  static async getPolls(): Promise<Poll[]> {
-    return this.request<Poll[]>('/polls');
+  static async getPolls(params?: {
+    status?: 'all' | 'active' | 'completed' | 'upcoming';
+    page?: number;
+    limit?: number;
+  }): Promise<PollsResponse> {
+    const query = new URLSearchParams();
+    if (params?.status && params.status !== 'all') {
+      query.set('status', params.status);
+    }
+    if (params?.page) {
+      query.set('page', String(params.page));
+    }
+    if (params?.limit) {
+      query.set('limit', String(params.limit));
+    }
+    const queryString = query.toString();
+    return this.request<PollsResponse>(`/polls${queryString ? `?${queryString}` : ''}`);
   }
 
   static async getPoll(pollId: string): Promise<Poll> {

@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -5,14 +7,24 @@
 @layer base {
   :root {
     color-scheme: light;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-display: swap;
   }
   :root[data-theme='dark'] {
     color-scheme: dark;
   }
   body {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
     @apply bg-gray-50 text-gray-900 transition-colors duration-300;
   }
   :root[data-theme='dark'] body {
     @apply bg-gray-900 text-gray-100;
+  }
+  header,
+  button,
+  .rounded-xl {
+    transition: color 0.25s ease, background-color 0.25s ease, border-color 0.25s ease;
+    will-change: color, background-color;
   }
 }
