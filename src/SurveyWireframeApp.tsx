@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Clock, LogIn, PieChart, ShieldCheck, UserCircle2 } from "lucide-react";
+import { CheckCircle2, Clock, LogIn, ShieldCheck } from "lucide-react";
 import { AppBar } from "./components/AppBar";
 import { PollList } from "./components/PollList";
 import { PollCreator } from "./components/PollCreator";
 import { DetailedResults } from "./components/DetailedResults";
 import { ProfilePanel } from "./components/ProfilePanel";
-import { PollApiService, Poll, VoteResult } from "./api/pollApi";
+import { AdminUserRolesPanel } from "./components/AdminUserRolesPanel";
+import { PollApiService, Poll, PollCreate, VoteResult } from "./api/pollApi";
 import { View } from "./types";
 import { useAuth } from "./context/AuthContext";
+import { canAccessView, hasPermission } from "./auth/rbac";
 
 export default function SurveyWireframeApp(): JSX.Element {
-  const { user, login, logout } = useAuth();
+  const { user } = useAuth();
   const [view, setView] = useState<View>("login");
   const [currentPoll, setCurrentPoll] = useState<Poll | null>(null);
   const [selectedChoices, setSelectedChoices] = useState<string[]>([]);
@@ -18,19 +20,22 @@ export default function SurveyWireframeApp(): JSX.Element {
   const [results, setResults] = useState<VoteResult | null>(null);
   const [loading, setLoading] = useState(false);
   const pollClosed = currentPoll ? isPollClosed(currentPoll) : false;
+  const canVote = hasPermission(user, "polls:vote");
 
   useEffect(() => {
-    if (user) {
-      setView((prev) => (prev === "login" ? "home" : prev));
-    } else {
-      setView("login");
+    if (!canAccessView(user, view)) {
+      setView(user ? "home" : "login");
+      return;
     }
-  }, [user]);
+    if (user && view === "login") {
+      setView("home");
+    }
+  }, [user, view]);
 
-  const handleCreatePoll = async (pollData: any) => {
+  const handleCreatePoll = async (pollData: PollCreate) => {
     try {
       setLoading(true);
-      await PollApiService.createPoll({ ...pollData, ownerUserId: user?.id });
+      await PollApiService.createPoll(pollData);
       setView("home");
     } catch (error) {
       alert('Ошибка при создании опроса');
@@ -41,6 +46,14 @@ export default function SurveyWireframeApp(): JSX.Element {
   };
 
   const handlePollSelect = (poll: Poll) => {
+    if (!user) {
+      setView("login");
+      return;
+    }
+    if (!canVote) {
+      alert('У вас нет прав на голосование');
+      return;
+    }
     setCurrentPoll(poll);
     setSelectedChoices([]);
     setShowConfirm(false);
@@ -74,7 +87,7 @@ export default function SurveyWireframeApp(): JSX.Element {
     try {
       setLoading(true);
       if (!user) { alert('Войдите, чтобы голосовать'); return; }
-      await PollApiService.vote(currentPoll.id, { userId: user.id, choices: selectedChoices });
+      await PollApiService.vote(currentPoll.id, { choices: selectedChoices });
       setShowConfirm(false);
       setView("success");
       setSelectedChoices([]);
@@ -103,8 +116,8 @@ export default function SurveyWireframeApp(): JSX.Element {
   };
 
   const handleNavigation = (next: View) => {
-    if (!user && (next === "organizer" || next === "profile")) {
-      setView("login");
+    if (!canAccessView(user, next)) {
+      setView(user ? "home" : "login");
       return;
     }
     setView(next);
@@ -143,7 +156,7 @@ export default function SurveyWireframeApp(): JSX.Element {
 
         {view === "home" && (
           <PollList 
-            onViewChange={setView}
+            onViewChange={handleNavigation}
             onPollSelect={handlePollSelect}
             onResultsSelect={handleResultsSelect}
           />
@@ -202,7 +215,7 @@ export default function SurveyWireframeApp(): JSX.Element {
                   )}
                 </small>
                 <button
-                  disabled={selectedChoices.length === 0 || loading || pollClosed}
+                  disabled={selectedChoices.length === 0 || loading || pollClosed || !canVote}
                   onClick={() => setShowConfirm(true)}
                   className="inline-flex items-center gap-2 rounded-xl bg-[#3C2779] px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50 disabled:bg-[#3C2779]/60 hover:bg-[#2A1B5A]"
                 >
@@ -260,6 +273,10 @@ export default function SurveyWireframeApp(): JSX.Element {
 
         {view === "profile" && (
           <ProfilePanel onBack={() => setView("home")} />
+        )}
+
+        {view === "admin" && (
+          <AdminUserRolesPanel onBack={() => setView("home")} />
         )}
       </main>
 
@@ -329,14 +346,6 @@ function AnonymityHint({ isAnonymous }: { isAnonymous: boolean }): JSX.Element {
         </p>
       )}
     </div>
-  );
-}
-
-function AnonymityFootnote(): JSX.Element {
-  return (
-    <p className="mt-4 text-xs text-gray-500">
-      ⓘ Результаты агрегированы. Нельзя сопоставить пользователя с выбранным вариантом.
-    </p>
   );
 }
 

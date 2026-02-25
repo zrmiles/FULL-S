@@ -30,7 +30,7 @@ class Poll(Base):
     title = Column(String, nullable=False)
     description = Column(Text)
     deadline_iso = Column(DateTime)
-    type = Column(String, nullable=False)  # 'single' or 'multi'
+    type = Column(String, nullable=False) 
     max_selections = Column(Integer, default=1)
     is_anonymous = Column(Boolean, default=True)  # True = анонимное, False = публичное
     created_at = Column(DateTime, default=datetime.utcnow)

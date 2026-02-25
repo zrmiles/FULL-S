@@ -10,11 +10,16 @@ backend/.env
 
 # python
 backend/venv
+backend/.venv
+.venv
+venv
 __pycache__/
 *.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # OS / editors
 .DS_Store
 *.swp
 *.swo
-

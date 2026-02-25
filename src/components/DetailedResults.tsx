@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { PieChart, Users, TrendingUp, Eye, EyeOff, Download, Share2 } from 'lucide-react';
 import { API_BASE_URL, VoteResult } from '../api/pollApi';
 
@@ -256,20 +256,3 @@ function getInitials(name?: string, username?: string | null): string {
   }
   return '?';
 }
-  const exportCsv = async (targetPollId: string) => {
-    try {
-      const csv = await PollApiService.exportResultsCsv(targetPollId);
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `poll-${targetPollId}-results.csv`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('Failed to export CSV', err);
-      alert('Не удалось экспортировать CSV');
-    }
-  };

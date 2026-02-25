@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Circle, Plus, X } from 'lucide-react';
 import { LabelledInputProps } from '../types';
 

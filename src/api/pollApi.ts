@@ -29,7 +29,7 @@ export interface PollCreate {
 }
 
 export interface VoteRequest {
-  userId: string;
+  userId?: string;
   choices: string[];
 }
 
@@ -58,6 +58,11 @@ export interface PollsResponse {
 }
 
 export class PollApiService {
+  private static currentUserHeaders(): HeadersInit {
+    const userId = AuthApi.currentUserId();
+    return userId ? { 'X-User-Id': userId } : {};
+  }
+
   private static async rawFetch(endpoint: string, options: RequestInit = {}) {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, options);
     if (!response.ok) {
@@ -103,23 +108,22 @@ export class PollApiService {
   static async createPoll(poll: PollCreate): Promise<Poll> {
     return this.request<Poll>('/polls', {
       method: 'POST',
+      headers: this.currentUserHeaders(),
       body: JSON.stringify(poll),
     });
   }
 
   static async deletePoll(pollId: string): Promise<{ status: string; message: string }> {
-    // Header X-User-Id will be set by callers via fetch wrapper if needed
     return this.request<{ status: string; message: string }>(`/polls/${pollId}`, {
       method: 'DELETE',
-      headers: {
-        ...(AuthApi.currentUserId() ? { 'X-User-Id': AuthApi.currentUserId()! } : {}),
-      }
+      headers: this.currentUserHeaders(),
     });
   }
 
   static async vote(pollId: string, vote: VoteRequest): Promise<{ status: string }> {
     return this.request<{ status: string }>(`/polls/${pollId}/vote`, {
       method: 'POST',
+      headers: this.currentUserHeaders(),
       body: JSON.stringify(vote),
     });
   }
@@ -140,17 +144,19 @@ export class PollApiService {
 }
 
 // Auth API
+export type UserRole = 'admin' | 'user';
+
 export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'user';
+  role: UserRole;
   username: string | null;
   avatarUrl?: string | null;
 }
 
 export interface RegisterOptions {
-  role?: 'admin' | 'user';
+  role?: UserRole;
   adminToken?: string;
 }
 
@@ -218,6 +224,12 @@ export class AuthApi {
     try { const u = JSON.parse(raw) as User; return u.id; } catch { return null; }
   }
 
+  static currentUser(): User | null {
+    const raw = localStorage.getItem('auth:user');
+    if (!raw) return null;
+    try { return JSON.parse(raw) as User; } catch { return null; }
+  }
+
   static async getProfile(): Promise<User> {
     const res = await fetch(`${API_BASE_URL}/me`, {
       headers: {
@@ -252,6 +264,30 @@ export class AuthApi {
       body: formData,
     });
     if (!res.ok) throw new Error('Failed to upload avatar');
+    return this.normalizeUser(await res.json());
+  }
+
+  static async listUsers(): Promise<User[]> {
+    const res = await fetch(`${API_BASE_URL}/users`, {
+      headers: {
+        'X-User-Id': this.requireUserId(),
+      },
+    });
+    if (!res.ok) throw new Error('Failed to load users');
+    const users = (await res.json()) as User[];
+    return users.map((user) => this.normalizeUser(user));
+  }
+
+  static async updateUserRole(userId: string, role: UserRole): Promise<User> {
+    const res = await fetch(`${API_BASE_URL}/admin/users/${userId}/role`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-User-Id': this.requireUserId(),
+      },
+      body: JSON.stringify({ role }),
+    });
+    if (!res.ok) throw new Error('Failed to update role');
     return this.normalizeUser(await res.json());
   }
 }

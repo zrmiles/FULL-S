@@ -1,4 +1,4 @@
-export type View = "login" | "home" | "poll" | "success" | "results" | "organizer" | "profile";
+export type View = "login" | "home" | "poll" | "success" | "results" | "organizer" | "profile" | "admin";
 
 export interface PollCardProps {
   title: string;
@@ -36,6 +36,5 @@ export interface LabelledInputProps {
   className?: string;
   min?: string;
 }
-
 
 

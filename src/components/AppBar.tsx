@@ -1,11 +1,14 @@
-import React from 'react';
 import { LogIn } from 'lucide-react';
 import logo from '../assets/mtuci-logo.svg';
 import { AppBarProps, NavBtnProps } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { hasPermission } from '../auth/rbac';
 
 export function AppBar({ onNav, current }: AppBarProps): JSX.Element {
   const { user, logout } = useAuth();
+  const canCreatePoll = hasPermission(user, 'polls:create');
+  const canManageRoles = hasPermission(user, 'users:role:manage');
+
   return (
     <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/90 backdrop-blur dark:border-gray-800 dark:bg-gray-900/80">
       <div className="mx-auto flex h-16 w-full max-w-screen-2xl flex-wrap items-center justify-between gap-4 px-6 sm:px-10">
@@ -21,9 +24,16 @@ export function AppBar({ onNav, current }: AppBarProps): JSX.Element {
           <NavBtn active={current === "home"} onClick={() => onNav("home")}>
             Опросы
           </NavBtn>
-          <NavBtn active={current === "organizer"} onClick={() => onNav("organizer")}>
-            Новый опрос
-          </NavBtn>
+          {user && canCreatePoll && (
+            <NavBtn active={current === "organizer"} onClick={() => onNav("organizer")}>
+              Новый опрос
+            </NavBtn>
+          )}
+          {user && canManageRoles && (
+            <NavBtn active={current === "admin"} onClick={() => onNav("admin")}>
+              Админ
+            </NavBtn>
+          )}
           {user && (
             <NavBtn active={current === "profile"} onClick={() => onNav("profile")}>
               Профиль

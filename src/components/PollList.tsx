@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Plus, PieChart } from 'lucide-react';
 import { PollCard } from './PollCard';
 import { PollApiService, Poll } from '../api/pollApi';
 import { View } from '../types';
 import { useAuth } from '../context/AuthContext';
+import { canDeletePoll, hasPermission } from '../auth/rbac';
 
 interface PollListProps {
   onViewChange: (view: View) => void;
@@ -21,7 +22,7 @@ export function PollList({ onViewChange, onPollSelect, onResultsSelect }: PollLi
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
   const [page, setPage] = useState(1);
-  const showCreateButton = filter !== 'completed';
+  const showCreateButton = filter !== 'completed' && hasPermission(user, 'polls:create');
 
   const loadPolls = useCallback(async () => {
     try {
@@ -84,7 +85,6 @@ export function PollList({ onViewChange, onPollSelect, onResultsSelect }: PollLi
     return { label: 'Ожидает', tone: 'amber' as const, state: 'upcoming' as const };
   };
 
-  const startIndex = total === 0 ? 0 : (page - 1) * PER_PAGE + 1;
   const endIndex = Math.min(page * PER_PAGE, total);
 
   if (loading) {
@@ -157,7 +157,7 @@ export function PollList({ onViewChange, onPollSelect, onResultsSelect }: PollLi
               status={status}
               onPrimary={() => onPollSelect(poll)}
               onSecondary={() => onResultsSelect(poll)}
-              onDelete={user && user.role === 'admin' ? () => handleDeletePoll(poll.id) : undefined}
+              onDelete={canDeletePoll(user, poll) ? () => handleDeletePoll(poll.id) : undefined}
             />
           );
         })

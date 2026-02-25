@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Literal
+from typing import List, Optional, Dict, Literal, Set
 from collections import defaultdict
 import logging
 import os
@@ -49,7 +49,8 @@ class PollListResponse(BaseModel):
 
 
 class VoteRequest(BaseModel):
-    userId: str
+    # Legacy field kept for backward compatibility; server uses current user from header.
+    userId: Optional[str] = None
     choices: List[str]
 
 
@@ -74,6 +75,63 @@ class VoteResult(BaseModel):
     isAnonymous: bool
     totalVoters: int
     participationRate: float  # Процент участия (если есть данные о приглашенных)
+
+
+PERM_USERS_READ_ALL = "users:read:all"
+PERM_USERS_READ_SELF = "users:read:self"
+PERM_USERS_ROLE_MANAGE = "users:role:manage"
+PERM_PROFILE_READ = "profile:read"
+PERM_PROFILE_UPDATE = "profile:update"
+PERM_PROFILE_AVATAR_UPDATE = "profile:avatar:update"
+PERM_POLLS_CREATE = "polls:create"
+PERM_POLLS_ASSIGN_OWNER = "polls:assign_owner"
+PERM_POLLS_VOTE = "polls:vote"
+PERM_POLLS_DELETE_ANY = "polls:delete:any"
+PERM_POLLS_DELETE_OWN = "polls:delete:own"
+
+ROLE_PERMISSIONS: Dict[str, Set[str]] = {
+    "admin": {
+        PERM_USERS_READ_ALL,
+        PERM_USERS_READ_SELF,
+        PERM_USERS_ROLE_MANAGE,
+        PERM_PROFILE_READ,
+        PERM_PROFILE_UPDATE,
+        PERM_PROFILE_AVATAR_UPDATE,
+        PERM_POLLS_CREATE,
+        PERM_POLLS_ASSIGN_OWNER,
+        PERM_POLLS_VOTE,
+        PERM_POLLS_DELETE_ANY,
+        PERM_POLLS_DELETE_OWN,
+    },
+    "user": {
+        PERM_USERS_READ_SELF,
+        PERM_PROFILE_READ,
+        PERM_PROFILE_UPDATE,
+        PERM_PROFILE_AVATAR_UPDATE,
+        PERM_POLLS_CREATE,
+        PERM_POLLS_VOTE,
+        PERM_POLLS_DELETE_OWN,
+    },
+}
+
+
+def role_permissions(role_name: Optional[str]) -> Set[str]:
+    # Deny by default for unknown or missing roles.
+    return ROLE_PERMISSIONS.get((role_name or "").strip().lower(), set())
+
+
+def user_has_permission(user: UserModel, permission: str) -> bool:
+    return permission in role_permissions(user.role)
+
+
+def can_manage_poll(user: UserModel, poll: PollModel) -> bool:
+    if user_has_permission(user, PERM_POLLS_DELETE_ANY):
+        return True
+    return (
+        user_has_permission(user, PERM_POLLS_DELETE_OWN)
+        and poll.owner_user_id is not None
+        and poll.owner_user_id == user.id
+    )
 
 
 app = FastAPI(title="MTUCI Backend", version="0.1.0")
@@ -277,6 +335,20 @@ def ensure_user_columns(db: Session) -> None:
         db.commit()
 
 
+def ensure_poll_columns(db: Session) -> None:
+    """Ensure legacy databases contain poll ownership column."""
+    inspector = inspect(db.get_bind())
+    try:
+        columns = {col["name"] for col in inspector.get_columns("polls")}
+    except NoSuchTableError:
+        return
+    if "owner_user_id" in columns:
+        return
+    db.execute(text("ALTER TABLE polls ADD COLUMN owner_user_id VARCHAR"))
+    db.commit()
+    logger.info("Added missing column polls.owner_user_id")
+
+
 def ensure_vote_constraints(db: Session) -> None:
     """Ensure votes table allows multi-select per variant."""
     inspector = inspect(db.get_bind())
@@ -329,6 +401,33 @@ def remove_existing_avatar_resource(avatar_url: Optional[str]) -> None:
                     MINIO_CLIENT.remove_object(MINIO_BUCKET, object_name)
                 except S3Error:
                     logger.warning("Failed to remove old MinIO avatar object %s", object_name)
+
+
+def _require_user_from_header(db: Session, x_user_id: Optional[str]) -> UserModel:
+    if not x_user_id:
+        raise HTTPException(status_code=401, detail="Missing user context")
+    user = db.query(UserModel).filter(UserModel.id == x_user_id).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid user")
+    return user
+
+
+def get_current_user(
+    db: Session = Depends(get_db),
+    x_user_id: Optional[str] = Header(default=None),
+) -> UserModel:
+    return _require_user_from_header(db, x_user_id)
+
+
+def require_permission(permission: str):
+    def dependency(current_user: UserModel = Depends(get_current_user)) -> UserModel:
+        if not user_has_permission(current_user, permission):
+            raise HTTPException(status_code=403, detail="Forbidden")
+        return current_user
+
+    return dependency
+
+
 # ===== Users API =====
 
 class UserCreate(BaseModel):
@@ -348,7 +447,12 @@ class User(BaseModel):
 
 # Legacy create_user (not password-based). Prefer /auth/register
 @app.post("/users", response_model=User, status_code=201)
-def create_user(body: UserCreate, db: Session = Depends(get_db)):
+def create_user(
+    body: UserCreate,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_permission(PERM_USERS_ROLE_MANAGE)),
+):
+    _ = current_user
     existing = db.query(UserModel).filter(UserModel.email == body.email).first()
     if existing:
         raise HTTPException(status_code=409, detail="User with this email already exists")
@@ -362,13 +466,27 @@ def create_user(body: UserCreate, db: Session = Depends(get_db)):
 
 
 @app.get("/users", response_model=List[User])
-def list_users(db: Session = Depends(get_db)):
+def list_users(
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_permission(PERM_USERS_READ_ALL)),
+):
+    _ = current_user
     users = db.query(UserModel).all()
     return [serialize_user_model(u) for u in users]
 
 
 @app.get("/users/{user_id}", response_model=User)
-def get_user(user_id: str, db: Session = Depends(get_db)):
+def get_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    if user_id == current_user.id:
+        if not user_has_permission(current_user, PERM_USERS_READ_SELF):
+            raise HTTPException(status_code=403, detail="Forbidden")
+    else:
+        if not user_has_permission(current_user, PERM_USERS_READ_ALL):
+            raise HTTPException(status_code=403, detail="Forbidden")
     user = db.query(UserModel).filter(UserModel.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -389,13 +507,8 @@ class UserUpdate(BaseModel):
     password: Optional[str] = Field(default=None, min_length=6)
 
 
-def _require_user_from_header(db: Session, x_user_id: Optional[str]) -> UserModel:
-    if not x_user_id:
-        raise HTTPException(status_code=401, detail="Missing user context")
-    user = db.query(UserModel).filter(UserModel.id == x_user_id).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid user")
-    return user
+class RoleUpdateRequest(BaseModel):
+    role: str = Field(..., pattern=r"^(admin|user)$")
 
 
 def serialize_user_model(user: UserModel) -> User:
@@ -408,12 +521,38 @@ def serialize_user_model(user: UserModel) -> User:
         avatarUrl=user.avatar_url,
     )
 
+
+@app.patch("/admin/users/{user_id}/role", response_model=User)
+def update_user_role(
+    user_id: str,
+    body: RoleUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_permission(PERM_USERS_ROLE_MANAGE)),
+):
+    _ = current_user
+    target = db.query(UserModel).filter(UserModel.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if target.role == "admin" and body.role != "admin":
+        admin_count = db.query(UserModel).filter(UserModel.role == "admin").count()
+        if admin_count <= 1:
+            raise HTTPException(status_code=400, detail="Cannot demote the last admin")
+
+    target.role = body.role
+    db.add(target)
+    db.commit()
+    db.refresh(target)
+    return serialize_user_model(target)
+
+
 @app.post("/auth/register", response_model=User, status_code=201)
 def register(body: RegisterRequest, db: Session = Depends(get_db), x_admin_token: Optional[str] = Header(default=None)):
     try:
         # Ensure database structure is up to date before any operations
         create_tables()
         ensure_user_columns(db)
+        ensure_poll_columns(db)
         # pre-check for clarity
         if db.query(UserModel).filter((UserModel.email == body.email) | (UserModel.username == body.username)).first():
             raise HTTPException(status_code=409, detail="User with this email or username already exists")
@@ -464,6 +603,7 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     try:
         create_tables()
         ensure_user_columns(db)
+        ensure_poll_columns(db)
         ensure_vote_constraints(db)
         identifier = body.username.strip()
         user = (
@@ -481,14 +621,17 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
 
 
 @app.get("/me", response_model=User)
-def read_profile(db: Session = Depends(get_db), x_user_id: Optional[str] = Header(default=None)):
-    user = _require_user_from_header(db, x_user_id)
-    return serialize_user_model(user)
+def read_profile(current_user: UserModel = Depends(require_permission(PERM_PROFILE_READ))):
+    return serialize_user_model(current_user)
 
 
 @app.put("/me", response_model=User)
-def update_profile(body: UserUpdate, db: Session = Depends(get_db), x_user_id: Optional[str] = Header(default=None)):
-    user = _require_user_from_header(db, x_user_id)
+def update_profile(
+    body: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_permission(PERM_PROFILE_UPDATE)),
+):
+    user = current_user
     changed = False
 
     if body.email and body.email != user.email:
@@ -514,8 +657,12 @@ def update_profile(body: UserUpdate, db: Session = Depends(get_db), x_user_id: O
 
 
 @app.post("/me/avatar", response_model=User)
-async def upload_avatar(file: UploadFile = File(...), db: Session = Depends(get_db), x_user_id: Optional[str] = Header(default=None)):
-    user = _require_user_from_header(db, x_user_id)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_permission(PERM_PROFILE_AVATAR_UPDATE)),
+):
+    user = current_user
     if file.content_type not in {"image/png", "image/jpeg", "image/jpg"}:
         raise HTTPException(status_code=400, detail="Unsupported file type")
     if not MINIO_CLIENT or not MINIO_PUBLIC_URL:
@@ -649,17 +796,25 @@ def list_polls(
 
 
 @app.post("/polls", response_model=Poll, status_code=201)
-def create_poll(body: PollCreate, db: Session = Depends(get_db)):
+def create_poll(
+    body: PollCreate,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_permission(PERM_POLLS_CREATE)),
+):
     if body.type == "multi" and (body.maxSelections is None or body.maxSelections < 1):
         raise HTTPException(status_code=400, detail="maxSelections must be >= 1 for multi polls")
     if len(body.variants) < 2:
         raise HTTPException(status_code=400, detail="Provide at least two variants")
 
-    # Validate owner if provided
+    owner_user_id = current_user.id
+    # Only users with explicit permission can assign owner other than themselves.
     if body.ownerUserId:
+        if body.ownerUserId != current_user.id and not user_has_permission(current_user, PERM_POLLS_ASSIGN_OWNER):
+            raise HTTPException(status_code=403, detail="Forbidden")
         owner = db.query(UserModel).filter(UserModel.id == body.ownerUserId).first()
         if not owner:
             raise HTTPException(status_code=400, detail="Owner user not found")
+        owner_user_id = body.ownerUserId
 
     deadline_dt = None
     now_utc = datetime.now(timezone.utc)
@@ -683,7 +838,7 @@ def create_poll(body: PollCreate, db: Session = Depends(get_db)):
         type=body.type,
         max_selections=body.maxSelections or 1,
         is_anonymous=body.isAnonymous if body.isAnonymous is not None else True,
-        owner_user_id=body.ownerUserId
+        owner_user_id=owner_user_id
     )
     db.add(poll)
     db.flush()  # Get the ID
@@ -733,7 +888,12 @@ def get_poll(poll_id: str, db: Session = Depends(get_db)):
 
 
 @app.post("/polls/{poll_id}/vote")
-def vote(poll_id: str, body: VoteRequest, db: Session = Depends(get_db)):
+def vote(
+    poll_id: str,
+    body: VoteRequest,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(require_permission(PERM_POLLS_VOTE)),
+):
     poll = db.query(PollModel).filter(PollModel.id == poll_id).first()
     if not poll:
         raise HTTPException(status_code=404, detail="Poll not found")
@@ -747,10 +907,8 @@ def vote(poll_id: str, body: VoteRequest, db: Session = Depends(get_db)):
         if current_utc > deadline_dt:
             raise HTTPException(status_code=403, detail="Poll is closed")
 
-    # Validate user
-    user = db.query(UserModel).filter(UserModel.id == body.userId).first()
-    if not user:
-        raise HTTPException(status_code=400, detail="User not found")
+    if body.userId and body.userId != current_user.id:
+        raise HTTPException(status_code=403, detail="Cannot vote on behalf of another user")
 
     # Get variant IDs for this poll
     variant_ids = {v.id for v in poll.variants}
@@ -769,7 +927,7 @@ def vote(poll_id: str, body: VoteRequest, db: Session = Depends(get_db)):
     # Delete existing votes for this user in this poll
     db.query(VoteModel).filter(
         VoteModel.poll_id == poll_id,
-        VoteModel.user_id == body.userId
+        VoteModel.user_id == current_user.id
     ).delete()
     
     # Create new votes
@@ -777,7 +935,7 @@ def vote(poll_id: str, body: VoteRequest, db: Session = Depends(get_db)):
         vote = VoteModel(
             poll_id=poll_id,
             variant_id=choice_id,
-            user_id=body.userId
+            user_id=current_user.id
         )
         db.add(vote)
     
@@ -883,18 +1041,16 @@ def get_results(
 
 
 @app.delete("/polls/{poll_id}")
-def delete_poll(poll_id: str, db: Session = Depends(get_db), x_user_id: Optional[str] = Header(default=None)):
+def delete_poll(
+    poll_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
     """Delete a poll and all its data"""
     poll = db.query(PollModel).filter(PollModel.id == poll_id).first()
     if not poll:
         raise HTTPException(status_code=404, detail="Poll not found")
-    # Authorization: only admin
-    if not x_user_id:
-        raise HTTPException(status_code=401, detail="Missing user context")
-    user = db.query(UserModel).filter(UserModel.id == x_user_id).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid user")
-    if user.role != "admin":
+    if not can_manage_poll(current_user, poll):
         raise HTTPException(status_code=403, detail="Forbidden")
     
     # Delete poll (cascade will handle variants and votes)
@@ -912,6 +1068,7 @@ def startup_event():
         db = next(db_gen)
         try:
             ensure_user_columns(db)
+            ensure_poll_columns(db)
             ensure_vote_constraints(db)
         finally:
             db.close()
