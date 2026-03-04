@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 type Theme = 'light' | 'dark';
 
@@ -11,6 +11,7 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 const THEME_KEY = 'ui:theme';
+const THEME_SWITCHING_CLASS = 'theme-switching';
 
 const getInitialTheme = (): Theme => {
   if (typeof window === 'undefined') return 'light';
@@ -21,20 +22,46 @@ const getInitialTheme = (): Theme => {
     : 'light';
 };
 
+const applyTheme = (theme: Theme): void => {
+  if (typeof document === 'undefined') return;
+  const root = document.documentElement;
+  root.dataset.theme = theme;
+  if (theme === 'dark') {
+    root.classList.add('dark');
+  } else {
+    root.classList.remove('dark');
+  }
+  localStorage.setItem(THEME_KEY, theme);
+};
+
 //изменение темы(светлая и темная, в профиле)
 export function ThemeProvider({ children }: { children: React.ReactNode }): JSX.Element {
   const [theme, setThemeState] = useState<Theme>(getInitialTheme);
+  const isFirstRender = useRef(true);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (typeof document === 'undefined') return;
     const root = document.documentElement;
-    root.dataset.theme = theme;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
+
+    let raf1 = 0;
+    let raf2 = 0;
+    if (!isFirstRender.current) {
+      root.classList.add(THEME_SWITCHING_CLASS);
+      raf1 = window.requestAnimationFrame(() => {
+        raf2 = window.requestAnimationFrame(() => {
+          root.classList.remove(THEME_SWITCHING_CLASS);
+        });
+      });
     }
-    localStorage.setItem(THEME_KEY, theme);
+
+    applyTheme(theme);
+    isFirstRender.current = false;
+
+    return () => {
+      if (raf1) window.cancelAnimationFrame(raf1);
+      if (raf2) window.cancelAnimationFrame(raf2);
+      root.classList.remove(THEME_SWITCHING_CLASS);
+    };
   }, [theme]);
 
   const setTheme = useCallback((next: Theme) => {

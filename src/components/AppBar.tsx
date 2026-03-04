@@ -20,7 +20,7 @@ export function AppBar({ onNav, current }: AppBarProps): JSX.Element {
           />
           <span className="text-base font-semibold text-gray-900 dark:text-gray-100">MTUCI — честные голосования</span>
         </div>
-        <nav className="flex flex-wrap items-center gap-2 text-sm">
+        <nav className="flex flex-wrap items-center gap-2 text-sm" aria-label="Основная навигация">
           <NavBtn active={current === "home"} onClick={() => onNav("home")}>
             Опросы
           </NavBtn>
@@ -41,6 +41,7 @@ export function AppBar({ onNav, current }: AppBarProps): JSX.Element {
           )}
           {!user && (
             <button
+              type="button"
               aria-label="Войти"
               className="rounded-full border border-gray-200 p-2 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
               onClick={() => onNav("login")}
@@ -51,7 +52,16 @@ export function AppBar({ onNav, current }: AppBarProps): JSX.Element {
           {user && (
             <span className="ml-2 inline-flex items-center gap-2 rounded-lg border border-gray-200 px-2 py-1 dark:border-gray-700">
               <span className="text-gray-600 text-sm dark:text-gray-200">{user.name}</span>
-              <button className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100" onClick={logout}>Выйти</button>
+              <button
+                type="button"
+                className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100"
+                onClick={async () => {
+                  await logout();
+                  onNav("login");
+                }}
+              >
+                Выйти
+              </button>
             </span>
           )}
         </nav>
@@ -62,7 +72,9 @@ export function AppBar({ onNav, current }: AppBarProps): JSX.Element {
 
 function NavBtn({ active, children, onClick }: NavBtnProps): JSX.Element {
   return (
-    <button 
+    <button
+      type="button"
+      aria-current={active ? 'page' : undefined}
       onClick={onClick} 
       className={`rounded-lg px-3 py-1.5 transition ${
         active ? "bg-gray-100 dark:bg-gray-800" : "hover:bg-gray-50 dark:hover:bg-gray-800"

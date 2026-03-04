@@ -21,6 +21,7 @@ class User(Base):
 
     # Relationships
     owned_polls = relationship("Poll", back_populates="owner")
+    refresh_sessions = relationship("RefreshTokenSession", back_populates="user", cascade="all, delete-orphan")
 
 
 class Poll(Base):
@@ -40,6 +41,7 @@ class Poll(Base):
     owner = relationship("User", back_populates="owned_polls")
     variants = relationship("PollVariant", back_populates="poll", cascade="all, delete-orphan")
     votes = relationship("Vote", back_populates="poll", cascade="all, delete-orphan")
+    attachments = relationship("PollAttachment", back_populates="poll", cascade="all, delete-orphan")
 
 
 class PollVariant(Base):
@@ -72,3 +74,34 @@ class Vote(Base):
     # Relationships
     poll = relationship("Poll", back_populates="votes")
     variant = relationship("PollVariant", back_populates="votes")
+
+
+class RefreshTokenSession(Base):
+    __tablename__ = "refresh_token_sessions"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    token_hash = Column(String, nullable=False, unique=True)
+    user_agent = Column(String, nullable=True)
+    ip_address = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    revoked_at = Column(DateTime, nullable=True)
+    replaced_by_id = Column(String, nullable=True)
+
+    user = relationship("User", back_populates="refresh_sessions")
+
+
+class PollAttachment(Base):
+    __tablename__ = "poll_attachments"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    poll_id = Column(String, ForeignKey("polls.id"), nullable=False, index=True)
+    uploader_user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    original_name = Column(String, nullable=False)
+    content_type = Column(String, nullable=False)
+    size_bytes = Column(Integer, nullable=False)
+    object_name = Column(String, nullable=False, unique=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    poll = relationship("Poll", back_populates="attachments")

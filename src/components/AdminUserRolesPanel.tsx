@@ -1,15 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AuthApi, User, UserRole } from '../api/pollApi';
+import { useAuth } from '../context/AuthContext';
+import { ConfirmDialog } from './ui/ConfirmDialog';
+import type { ToastKind } from './ui/ToastRegion';
 
 interface AdminUserRolesPanelProps {
   onBack: () => void;
+  onNotify?: (message: string, kind?: ToastKind) => void;
 }
 
-export function AdminUserRolesPanel({ onBack }: AdminUserRolesPanelProps): JSX.Element {
+export function AdminUserRolesPanel({ onBack, onNotify }: AdminUserRolesPanelProps): JSX.Element {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
+  const [pendingDeleteUser, setPendingDeleteUser] = useState<User | null>(null);
 
   const loadUsers = useCallback(async () => {
     try {
@@ -36,9 +42,27 @@ export function AdminUserRolesPanel({ onBack }: AdminUserRolesPanelProps): JSX.E
       setUsers((prev) => prev.map((user) => (user.id === updated.id ? updated : user)));
     } catch (err) {
       console.error('Failed to update role', err);
-      alert('Не удалось изменить роль пользователя');
+      onNotify?.('Не удалось изменить роль пользователя', 'error');
     } finally {
       setSavingUserId(null);
+    }
+  };
+
+  const deleteUser = async () => {
+    if (!pendingDeleteUser) {
+      return;
+    }
+    try {
+      setSavingUserId(pendingDeleteUser.id);
+      await AuthApi.deleteUser(pendingDeleteUser.id);
+      setUsers((prev) => prev.filter((item) => item.id !== pendingDeleteUser.id));
+      onNotify?.('Пользователь удалён', 'success');
+    } catch (err) {
+      console.error('Failed to delete user', err);
+      onNotify?.('Не удалось удалить пользователя', 'error');
+    } finally {
+      setSavingUserId(null);
+      setPendingDeleteUser(null);
     }
   };
 
@@ -53,9 +77,13 @@ export function AdminUserRolesPanel({ onBack }: AdminUserRolesPanelProps): JSX.E
         </div>
       </div>
 
-      {loading && <div className="text-sm text-gray-500">Загрузка пользователей...</div>}
+      {loading && (
+        <div className="text-sm text-gray-500" role="status" aria-live="polite">
+          Загрузка пользователей...
+        </div>
+      )}
       {error && (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
           {error}
         </div>
       )}
@@ -68,6 +96,7 @@ export function AdminUserRolesPanel({ onBack }: AdminUserRolesPanelProps): JSX.E
                 <th className="px-4 py-3 font-medium">Пользователь</th>
                 <th className="px-4 py-3 font-medium">E-mail</th>
                 <th className="px-4 py-3 font-medium">Роль</th>
+                <th className="px-4 py-3 font-medium">Действие</th>
               </tr>
             </thead>
             <tbody>
@@ -89,6 +118,16 @@ export function AdminUserRolesPanel({ onBack }: AdminUserRolesPanelProps): JSX.E
                       <option value="admin">admin</option>
                     </select>
                   </td>
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      disabled={savingUserId === user.id || currentUser?.id === user.id}
+                      onClick={() => setPendingDeleteUser(user)}
+                      className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 disabled:opacity-50 dark:border-red-600 dark:text-red-300"
+                    >
+                      Удалить
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -98,12 +137,23 @@ export function AdminUserRolesPanel({ onBack }: AdminUserRolesPanelProps): JSX.E
 
       <div>
         <button
+          type="button"
           onClick={onBack}
           className="rounded-xl border border-gray-200 px-4 py-2 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
         >
           Назад
         </button>
       </div>
+
+      <ConfirmDialog
+        open={!!pendingDeleteUser}
+        title="Удалить пользователя?"
+        description={pendingDeleteUser ? `Пользователь ${pendingDeleteUser.name} будет удалён без возможности восстановления.` : ''}
+        confirmLabel="Удалить"
+        danger
+        onCancel={() => setPendingDeleteUser(null)}
+        onConfirm={deleteUser}
+      />
     </section>
   );
 }

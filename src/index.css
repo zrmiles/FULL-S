@@ -18,13 +18,43 @@
     text-rendering: optimizeLegibility;
     @apply bg-gray-50 text-gray-900 transition-colors duration-300;
   }
+  :focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+  }
   :root[data-theme='dark'] body {
     @apply bg-gray-900 text-gray-100;
   }
+  html,
+  body,
+  #root,
   header,
   button,
+  input,
+  select,
+  textarea,
   .rounded-xl {
-    transition: color 0.25s ease, background-color 0.25s ease, border-color 0.25s ease;
-    will-change: color, background-color;
+    transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+  }
+
+  :root.theme-switching *,
+  :root.theme-switching *::before,
+  :root.theme-switching *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html,
+    body,
+    #root,
+    header,
+    button,
+    input,
+    select,
+    textarea,
+    .rounded-xl {
+      transition: none !important;
+    }
   }
 }

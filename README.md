@@ -50,10 +50,16 @@ pip install -r requirements.txt
 npm run dev
 ```
 
-Backend (из директории `backend`):
+Backend (из корня проекта):
+```bash
+source backend/venv/bin/activate
+python -m uvicorn app:app --reload --app-dir backend --port 8000
+```
+
+Или из директории `backend`:
 ```bash
 source venv/bin/activate
-uvicorn app:app --reload --app-dir backend --port 8000
+python -m uvicorn app:app --reload --port 8000
 ```
 
 Для параллельного запуска фронта и API используйте `npm run dev:all` из корня (скрипт поднимет Vite и uvicorn).
@@ -61,7 +67,7 @@ uvicorn app:app --reload --app-dir backend --port 8000
 ## Как работает загрузка аватаров
 
 - В профиле пользователь выбирает файл, мы обрезаем его в браузере (`react-easy-crop`) и отправляем на `/me/avatar`.
-- Backend (см. `backend/app.py`) проверяет тип файла, читает поток и загружает объект в MinIO (`put_object`), формируя путь `<userId>/<uuid>.jpg|png`.
+- Backend (см. `backend/routers/users.py` и `backend/runtime.py`) проверяет тип файла, читает поток и загружает объект в MinIO (`put_object`), формируя путь `<userId>/<uuid>.jpg|png`.
 - Ссылка на объект (`MINIO_PUBLIC_URL/<bucket>/<object>`) сохраняется в БД, поэтому UI и отчёты сразу видят обновлённый аватар.
 
 Чтобы остановить MinIO, завершите процесс `minio server` (Ctrl+C) и по необходимости удалите каталог `~/minio-data`.
@@ -79,7 +85,7 @@ uvicorn app:app --reload --app-dir backend --port 8000
 
 Ключевые ограничения:
 
-- Все защищённые операции проверяют `X-User-Id` и права через RBAC-guard в `backend/app.py`.
+- Все защищённые операции проверяют `X-User-Id` и права через RBAC-guard в `backend/dependencies.py` + `backend/authz.py`.
 - При создании опроса `owner_user_id` ставится из `current_user.id` (если роль не позволяет назначать другого владельца).
 - Голосование разрешено только от имени текущего пользователя.
 - Endpoint управления ролями только для админа: `PATCH /admin/users/{user_id}/role`.

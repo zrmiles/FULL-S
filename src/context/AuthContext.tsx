@@ -5,7 +5,7 @@ type AuthContextType = {
   user: User | null;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, email: string, name: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   fetchProfile: () => Promise<User>;
   updateProfile: (payload: ProfileUpdatePayload) => Promise<User>;
   uploadAvatar: (file: File) => Promise<User>;
@@ -17,10 +17,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }): JSX.E
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
-    const raw = localStorage.getItem('auth:user');
-    if (raw) {
-      try { setUser(JSON.parse(raw)); } catch {}
-    }
+    const syncUser = () => {
+      setUser(AuthApi.currentUser());
+    };
+
+    syncUser();
+    window.addEventListener('auth:changed', syncUser);
+    return () => {
+      window.removeEventListener('auth:changed', syncUser);
+    };
   }, []);
 
   const persistUser = useCallback((u: User | null) => {
@@ -30,20 +35,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }): JSX.E
     } else {
       localStorage.removeItem('auth:user');
     }
+    window.dispatchEvent(new Event('auth:changed'));
   }, []);
 
-  const login = useCallback(async (username: string, password: string) => {
-    const u = await AuthApi.login(username, password);
-    persistUser(u);
-  }, [persistUser]);
+  const login = useCallback(
+    async (username: string, password: string) => {
+      const nextUser = await AuthApi.login(username, password);
+      persistUser(nextUser);
+    },
+    [persistUser]
+  );
 
-  const register = useCallback(async (username: string, email: string, name: string, password: string) => {
-    const u = await AuthApi.register(username, email, name, password);
-    persistUser(u);
-  }, [persistUser]);
+  const register = useCallback(
+    async (username: string, email: string, name: string, password: string) => {
+      const nextUser = await AuthApi.register(username, email, name, password);
+      persistUser(nextUser);
+    },
+    [persistUser]
+  );
 
-  const logout = useCallback(() => {
-    persistUser(null);
+  const logout = useCallback(async () => {
+    try {
+      await AuthApi.logout();
+    } finally {
+      persistUser(null);
+    }
   }, [persistUser]);
 
   const fetchProfile = useCallback(async () => {
@@ -52,26 +68,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }): JSX.E
     return profile;
   }, [persistUser]);
 
-  const updateProfile = useCallback(async (payload: ProfileUpdatePayload) => {
-    const updated = await AuthApi.updateProfile(payload);
-    persistUser(updated);
-    return updated;
-  }, [persistUser]);
+  const updateProfile = useCallback(
+    async (payload: ProfileUpdatePayload) => {
+      const updated = await AuthApi.updateProfile(payload);
+      persistUser(updated);
+      return updated;
+    },
+    [persistUser]
+  );
 
-  const uploadAvatar = useCallback(async (file: File) => {
-    const updated = await AuthApi.uploadAvatar(file);
-    persistUser(updated);
-    return updated;
-  }, [persistUser]);
+  const uploadAvatar = useCallback(
+    async (file: File) => {
+      const updated = await AuthApi.uploadAvatar(file);
+      persistUser(updated);
+      return updated;
+    },
+    [persistUser]
+  );
 
   const value = useMemo(
     () => ({ user, login, logout, register, fetchProfile, updateProfile, uploadAvatar }),
     [user, login, logout, register, fetchProfile, updateProfile, uploadAvatar]
   );
+
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-// функкция авторизации пользователя
 export function useAuth(): AuthContextType {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');

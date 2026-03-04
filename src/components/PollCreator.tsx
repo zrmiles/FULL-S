@@ -13,6 +13,7 @@ interface PollCreatorProps {
     isAnonymous: boolean;
   }) => void;
   onCancel: () => void;
+  onValidationError?: (message: string) => void;
 }
 
 const toInputValue = (date: Date) => {
@@ -20,7 +21,7 @@ const toInputValue = (date: Date) => {
   return local.toISOString().slice(0, 16);
 };
 
-export function PollCreator({ onCreatePoll, onCancel }: PollCreatorProps): JSX.Element {
+export function PollCreator({ onCreatePoll, onCancel, onValidationError }: PollCreatorProps): JSX.Element {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [deadline, setDeadline] = useState(() => toInputValue(new Date(Date.now() + 36e5)));
@@ -32,13 +33,13 @@ export function PollCreator({ onCreatePoll, onCancel }: PollCreatorProps): JSX.E
 
   const handleSubmit = () => {
     if (!title.trim() || variants.length < 2) {
-      alert('Заполните заголовок и добавьте минимум 2 варианта');
+      onValidationError?.('Заполните заголовок и добавьте минимум 2 варианта');
       return;
     }
 
     const deadlineDate = deadline ? new Date(deadline) : null;
     if (deadlineDate && deadlineDate < new Date()) {
-      alert('Дедлайн не может быть в прошлом');
+      onValidationError?.('Дедлайн не может быть в прошлом');
       return;
     }
 
@@ -164,6 +165,7 @@ export function PollCreator({ onCreatePoll, onCancel }: PollCreatorProps): JSX.E
         <div className="mb-2 flex items-center justify-between">
           <span className="text-sm text-gray-500">Варианты</span>
           <button
+            type="button"
             className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-sm dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-700"
             onClick={() => setVariants([...variants, `Вариант ${variants.length + 1}`])}
           >
@@ -184,6 +186,7 @@ export function PollCreator({ onCreatePoll, onCancel }: PollCreatorProps): JSX.E
                 }
               />
               <button
+                type="button"
                 aria-label="Удалить вариант"
                 className="rounded-lg p-1 text-gray-400 hover:bg-gray-50 hover:text-gray-600"
                 onClick={() => setVariants((arr) => arr.filter((_, i) => i !== idx))}
@@ -197,12 +200,14 @@ export function PollCreator({ onCreatePoll, onCancel }: PollCreatorProps): JSX.E
 
       <div className="mt-4 flex justify-end gap-2">
         <button 
+          type="button"
           onClick={onCancel}
           className="rounded-xl border border-gray-200 px-4 py-2 hover:bg-gray-50"
         >
           Отмена
         </button>
         <button 
+          type="button"
           onClick={handleSubmit}
           className="rounded-xl bg-[#3C2779] px-4 py-2 text-white hover:bg-[#2A1B5A]"
         >
