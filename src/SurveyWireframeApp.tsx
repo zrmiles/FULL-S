@@ -1,10 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { AppBar } from './components/AppBar';
 import { PollList } from './components/PollList';
-import { PollCreator } from './components/PollCreator';
-import { DetailedResults } from './components/DetailedResults';
-import { ProfilePanel } from './components/ProfilePanel';
-import { AdminUserRolesPanel } from './components/AdminUserRolesPanel';
 import { LoginView } from './components/views/LoginView';
 import { PollVotingView } from './components/views/PollVotingView';
 import { SuccessView } from './components/views/SuccessView';
@@ -14,6 +10,7 @@ import { PollApiService, Poll, PollAttachment, PollCreate, VoteResult } from './
 import { View } from './types';
 import { useAuth } from './context/AuthContext';
 import { canAccessView, canDeletePoll, hasPermission } from './auth/rbac';
+import { useSeo } from './seo/useSeo';
 
 const VIEW_PATHS: Record<View, string> = {
   login: '/вход',
@@ -25,6 +22,11 @@ const VIEW_PATHS: Record<View, string> = {
   profile: '/профиль',
   admin: '/админ',
 };
+
+const PollCreator = lazy(() => import('./components/PollCreator').then((mod) => ({ default: mod.PollCreator })));
+const DetailedResults = lazy(() => import('./components/DetailedResults').then((mod) => ({ default: mod.DetailedResults })));
+const ProfilePanel = lazy(() => import('./components/ProfilePanel').then((mod) => ({ default: mod.ProfilePanel })));
+const AdminUserRolesPanel = lazy(() => import('./components/AdminUserRolesPanel').then((mod) => ({ default: mod.AdminUserRolesPanel })));
 
 const MOSCOW_FORMATTER = new Intl.DateTimeFormat('ru-RU', {
   timeZone: 'Europe/Moscow',
@@ -96,6 +98,113 @@ export default function SurveyWireframeApp(): JSX.Element {
   const pollClosed = currentPoll ? isPollClosed(currentPoll) : false;
   const canVote = hasPermission(user, 'polls:vote');
   const canManageAttachments = !!(user && currentPoll && canDeletePoll(user, currentPoll));
+  const viewFallback = <div className="rounded-xl bg-white/80 p-4 text-sm text-gray-500 dark:bg-gray-800/70 dark:text-gray-300">Загрузка...</div>;
+
+  const seoState = useMemo(() => {
+    const path = toPath(view);
+    if (view === 'home') {
+      return {
+        title: 'Опросы MTUCI: голосование и результаты',
+        description: 'Публичный каталог опросов MTUCI с поиском, фильтрацией и просмотром результатов.',
+        canonicalPath: VIEW_PATHS.home,
+        robots: 'index,follow',
+        ogType: 'website' as const,
+        structuredData: {
+          '@context': 'https://schema.org',
+          '@type': 'CollectionPage',
+          name: 'Опросы MTUCI',
+          inLanguage: 'ru-RU',
+          description: 'Публичный каталог опросов для студентов и сотрудников.',
+          url: `${window.location.origin}${VIEW_PATHS.home}`,
+        },
+      };
+    }
+    if (view === 'results') {
+      const topResult = results?.results?.slice().sort((a, b) => b.count - a.count)[0];
+      return {
+        title: currentPoll ? `Результаты: ${currentPoll.title}` : 'Результаты голосований MTUCI',
+        description: currentPoll
+          ? `Актуальные результаты опроса «${currentPoll.title}».`
+          : 'Публичные результаты голосований MTUCI.',
+        canonicalPath: VIEW_PATHS.results,
+        robots: 'index,follow',
+        ogType: 'article' as const,
+        structuredData: currentPoll
+          ? {
+              '@context': 'https://schema.org',
+              '@type': 'Question',
+              name: currentPoll.title,
+              text: currentPoll.description || currentPoll.title,
+              answerCount: results?.totalVoters ?? 0,
+              acceptedAnswer: topResult
+                ? {
+                    '@type': 'Answer',
+                    text: topResult.label,
+                  }
+                : undefined,
+            }
+          : null,
+      };
+    }
+
+    const serviceNoIndex = 'noindex,nofollow';
+    if (view === 'login') {
+      return {
+        title: 'Вход в MTUCI Voting App',
+        description: 'Страница авторизации в системе голосований MTUCI.',
+        canonicalPath: VIEW_PATHS.login,
+        robots: serviceNoIndex,
+      };
+    }
+    if (view === 'poll') {
+      return {
+        title: currentPoll ? `Голосование: ${currentPoll.title}` : 'Голосование',
+        description: 'Страница голосования. Доступна только авторизованным пользователям.',
+        canonicalPath: VIEW_PATHS.poll,
+        robots: serviceNoIndex,
+      };
+    }
+    if (view === 'organizer') {
+      return {
+        title: 'Создать опрос',
+        description: 'Служебная страница создания нового опроса.',
+        canonicalPath: VIEW_PATHS.organizer,
+        robots: serviceNoIndex,
+      };
+    }
+    if (view === 'profile') {
+      return {
+        title: 'Профиль пользователя',
+        description: 'Личный кабинет пользователя.',
+        canonicalPath: VIEW_PATHS.profile,
+        robots: serviceNoIndex,
+      };
+    }
+    if (view === 'admin') {
+      return {
+        title: 'Администрирование',
+        description: 'Служебный административный раздел приложения.',
+        canonicalPath: VIEW_PATHS.admin,
+        robots: serviceNoIndex,
+      };
+    }
+    if (view === 'success') {
+      return {
+        title: 'Голос отправлен',
+        description: 'Служебная страница подтверждения отправки голоса.',
+        canonicalPath: VIEW_PATHS.success,
+        robots: serviceNoIndex,
+      };
+    }
+    return {
+      title: 'MTUCI Voting App',
+      description: 'Система онлайн-голосований MTUCI.',
+      canonicalPath: path,
+      robots: serviceNoIndex,
+    };
+  }, [view, currentPoll, results]);
+
+  useSeo(seoState);
 
   const notify = useCallback((message: string, kind: ToastKind = 'info') => {
     setToasts((prev) => [...prev, { id: createToastId(), message, kind }]);
@@ -399,6 +508,7 @@ export default function SurveyWireframeApp(): JSX.Element {
       <AppBar onNav={navigateToView} current={view} />
 
       <main id="main-content" className="mx-auto w-full max-w-screen-md px-4 py-6">
+        <h1 className="sr-only">Платформа голосований MTUCI</h1>
         {view === 'login' && <LoginView onSuccess={() => navigateToView('home')} onNotify={notify} />}
 
         {view === 'home' && (
@@ -441,7 +551,9 @@ export default function SurveyWireframeApp(): JSX.Element {
         )}
 
         {view === 'results' && currentPoll && results && (
-          <DetailedResults results={results} pollTitle={currentPoll.title} onBack={() => navigateToView('home')} pollId={currentPoll.id} />
+          <Suspense fallback={viewFallback}>
+            <DetailedResults results={results} pollTitle={currentPoll.title} onBack={() => navigateToView('home')} pollId={currentPoll.id} />
+          </Suspense>
         )}
 
         {view === 'organizer' && (
@@ -453,17 +565,27 @@ export default function SurveyWireframeApp(): JSX.Element {
               </div>
             </div>
 
-            <PollCreator
-              onCreatePoll={handleCreatePoll}
-              onCancel={() => navigateToView('home')}
-              onValidationError={(message) => notify(message, 'error')}
-            />
+            <Suspense fallback={viewFallback}>
+              <PollCreator
+                onCreatePoll={handleCreatePoll}
+                onCancel={() => navigateToView('home')}
+                onValidationError={(message) => notify(message, 'error')}
+              />
+            </Suspense>
           </section>
         )}
 
-        {view === 'profile' && <ProfilePanel onBack={() => navigateToView('home')} />}
+        {view === 'profile' && (
+          <Suspense fallback={viewFallback}>
+            <ProfilePanel onBack={() => navigateToView('home')} />
+          </Suspense>
+        )}
 
-        {view === 'admin' && <AdminUserRolesPanel onBack={() => navigateToView('home')} onNotify={notify} />}
+        {view === 'admin' && (
+          <Suspense fallback={viewFallback}>
+            <AdminUserRolesPanel onBack={() => navigateToView('home')} onNotify={notify} />
+          </Suspense>
+        )}
       </main>
 
       <ConfirmDialog

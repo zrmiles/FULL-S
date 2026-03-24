@@ -157,6 +157,10 @@ export function DetailedResults({ results, pollTitle, onBack, pollId }: Detailed
                           <img
                             src={voter.avatarUrl}
                             alt={voter.username ?? voter.name}
+                            loading="lazy"
+                            decoding="async"
+                            width={24}
+                            height={24}
                             className="h-6 w-6 rounded-full object-cover"
                           />
                         ) : (

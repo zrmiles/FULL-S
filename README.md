@@ -21,7 +21,7 @@ pip install -r requirements.txt
    ```bash
    cp backend/env.example backend/.env
    ```
-   Внутри задайте URL базы, а также параметры MinIO (`MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`, `MINIO_PUBLIC_URL`, `MINIO_USE_SSL`). Для локального окружения можно оставить значения по умолчанию.
+   Внутри задайте URL базы, а также параметры MinIO (`MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_BUCKET`, `MINIO_PUBLIC_URL`, `MINIO_USE_SSL`), URL фронтенда для sitemap (`PUBLIC_BASE_URL`) и ключ внешнего API погоды (`WEATHER_API_KEY`). Для локального окружения можно оставить значения по умолчанию, кроме `WEATHER_API_KEY`.
 
 2. Запустите MinIO вручную (без Docker). Проще всего установить официальный бинарь:
    ```bash
@@ -52,8 +52,8 @@ npm run dev
 
 Backend (из корня проекта):
 ```bash
-source backend/venv/bin/activate
-python -m uvicorn app:app --reload --app-dir backend --port 8000
+source venv/bin/activate
+python -m uvicorn app:app --reload --port 8000
 ```
 
 Или из директории `backend`:
@@ -94,3 +94,12 @@ Frontend также учитывает роли:
 
 - скрывает недоступные действия (например, удаление чужих опросов);
 - защищает приватные и ролевые экраны (`organizer`, `profile`, `admin`).
+
+## SEO и внешние интеграции
+
+- На backend доступны:
+  - `GET /robots.txt`
+  - `GET /sitemap.xml`
+  - `GET /external/weather` (интеграция OpenWeatherMap через server-side adapter, с retry, timeout, rate limit и cache)
+- На frontend добавлены динамические `title/description/canonical`, OpenGraph/Twitter meta и JSON-LD.
+- Матрица индексируемых/закрытых страниц находится в файле `SEO_SCOPE.md`.

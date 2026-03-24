@@ -6,8 +6,6 @@ import logging
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
-
 logger = logging.getLogger("survey_backend.database")
 if not logger.handlers:
     handler = logging.StreamHandler()
@@ -16,6 +14,9 @@ if not logger.handlers:
 logger.setLevel(logging.INFO)
 
 BASE_DIR = Path(__file__).resolve().parent
+ENV_PATH = BASE_DIR / ".env"
+load_dotenv(ENV_PATH)
+
 DEFAULT_SQLITE_PATH = BASE_DIR / "survey.db"
 DEFAULT_POSTGRES_URL = "postgresql+psycopg://uralazarev@localhost:5432/survey_db"
 

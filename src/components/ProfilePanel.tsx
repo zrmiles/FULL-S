@@ -197,6 +197,10 @@ export function ProfilePanel({ onBack }: ProfilePanelProps): JSX.Element {
             <img
               src={avatarPreview}
               alt="Аватар"
+              loading="lazy"
+              decoding="async"
+              width={80}
+              height={80}
               className="h-20 w-20 rounded-full border border-gray-200 object-cover"
             />
           ) : (

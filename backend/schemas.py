@@ -85,6 +85,19 @@ class VoteResult(BaseModel):
     participationRate: float
 
 
+class ExternalWeatherSnapshot(BaseModel):
+    city: str
+    condition: str
+    conditionDescription: str
+    temperatureC: float
+    feelsLikeC: float
+    humidityPercent: int
+    windSpeedMps: float
+    observedAt: str
+    source: str
+    cached: bool = False
+
+
 class UserCreate(BaseModel):
     email: str
     name: str

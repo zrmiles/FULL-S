@@ -229,8 +229,28 @@ interface PollAttachmentListResponse {
   items: PollAttachment[];
 }
 
+export interface WeatherSnapshot {
+  city: string;
+  condition: string;
+  conditionDescription: string;
+  temperatureC: number;
+  feelsLikeC: number;
+  humidityPercent: number;
+  windSpeedMps: number;
+  observedAt: string;
+  source: string;
+  cached: boolean;
+}
+
 export class PollApiService {
-  static async getPolls(params?: {
+  private static pollsCache = new Map<string, { expiresAt: number; payload: PollsResponse }>();
+  private static readonly POLLS_CACHE_TTL_MS = 15_000;
+
+  private static clearPollsCache(): void {
+    this.pollsCache.clear();
+  }
+
+  private static toPollsCacheKey(params?: {
     status?: 'all' | 'active' | 'completed' | 'upcoming';
     search?: string;
     isAnonymous?: boolean;
@@ -239,7 +259,7 @@ export class PollApiService {
     sortOrder?: 'asc' | 'desc';
     page?: number;
     limit?: number;
-  }): Promise<PollsResponse> {
+  }): string {
     const query = new URLSearchParams();
     if (params?.status && params.status !== 'all') {
       query.set('status', params.status);
@@ -265,8 +285,33 @@ export class PollApiService {
     if (params?.limit) {
       query.set('limit', String(params.limit));
     }
-    const queryString = query.toString();
-    return ApiClient.request<PollsResponse>(`/polls${queryString ? `?${queryString}` : ''}`);
+    return query.toString();
+  }
+
+  static async getPolls(params?: {
+    status?: 'all' | 'active' | 'completed' | 'upcoming';
+    search?: string;
+    isAnonymous?: boolean;
+    ownerUserId?: string;
+    sortBy?: 'deadline' | 'created' | 'title';
+    sortOrder?: 'asc' | 'desc';
+    page?: number;
+    limit?: number;
+  }): Promise<PollsResponse> {
+    const queryString = this.toPollsCacheKey(params);
+    const cacheKey = queryString || '__default__';
+    const now = Date.now();
+    const cached = this.pollsCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+      return cached.payload;
+    }
+
+    const payload = await ApiClient.request<PollsResponse>(`/polls${queryString ? `?${queryString}` : ''}`);
+    this.pollsCache.set(cacheKey, {
+      payload,
+      expiresAt: now + this.POLLS_CACHE_TTL_MS,
+    });
+    return payload;
   }
 
   static async getPoll(pollId: string): Promise<Poll> {
@@ -274,15 +319,17 @@ export class PollApiService {
   }
 
   static async createPoll(poll: PollCreate): Promise<Poll> {
-    return ApiClient.request<Poll>('/polls', {
+    const payload = await ApiClient.request<Poll>('/polls', {
       method: 'POST',
       body: JSON.stringify(poll),
     });
+    this.clearPollsCache();
+    return payload;
   }
 
   static async updatePoll(
     pollId: string,
-    payload: Partial<{
+    updatePayload: Partial<{
       title: string;
       description: string;
       deadlineISO: string;
@@ -292,23 +339,29 @@ export class PollApiService {
       isAnonymous: boolean;
     }>
   ): Promise<Poll> {
-    return ApiClient.request<Poll>(`/polls/${pollId}`, {
+    const result = await ApiClient.request<Poll>(`/polls/${pollId}`, {
       method: 'PUT',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(updatePayload),
     });
+    this.clearPollsCache();
+    return result;
   }
 
   static async deletePoll(pollId: string): Promise<{ status: string; message: string }> {
-    return ApiClient.request<{ status: string; message: string }>(`/polls/${pollId}`, {
+    const payload = await ApiClient.request<{ status: string; message: string }>(`/polls/${pollId}`, {
       method: 'DELETE',
     });
+    this.clearPollsCache();
+    return payload;
   }
 
   static async vote(pollId: string, vote: VoteRequest): Promise<{ status: string }> {
-    return ApiClient.request<{ status: string }>(`/polls/${pollId}/vote`, {
+    const payload = await ApiClient.request<{ status: string }>(`/polls/${pollId}/vote`, {
       method: 'POST',
       body: JSON.stringify(vote),
     });
+    this.clearPollsCache();
+    return payload;
   }
 
   static async getResults(pollId: string): Promise<VoteResult> {
@@ -333,16 +386,33 @@ export class PollApiService {
   static async uploadPollAttachment(pollId: string, file: File): Promise<PollAttachment> {
     const formData = new FormData();
     formData.append('file', file);
-    return ApiClient.request<PollAttachment>(`/polls/${pollId}/attachments`, {
+    const payload = await ApiClient.request<PollAttachment>(`/polls/${pollId}/attachments`, {
       method: 'POST',
       body: formData,
     });
+    this.clearPollsCache();
+    return payload;
   }
 
   static async deletePollAttachment(pollId: string, attachmentId: string): Promise<{ status: string }> {
-    return ApiClient.request<{ status: string }>(`/polls/${pollId}/attachments/${attachmentId}`, {
+    const payload = await ApiClient.request<{ status: string }>(`/polls/${pollId}/attachments/${attachmentId}`, {
       method: 'DELETE',
     });
+    this.clearPollsCache();
+    return payload;
+  }
+
+  static async getWeatherSnapshot(city?: string): Promise<WeatherSnapshot> {
+    const query = new URLSearchParams();
+    if (city?.trim()) {
+      query.set('city', city.trim());
+    }
+    const queryString = query.toString();
+    return ApiClient.request<WeatherSnapshot>(
+      `/external/weather${queryString ? `?${queryString}` : ''}`,
+      {},
+      { skipAuth: true, retryOnUnauthorized: false }
+    );
   }
 }
 

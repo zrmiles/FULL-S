@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, PieChart, Search } from 'lucide-react';
 import { PollCard } from './PollCard';
+import { ExternalWeatherCard } from './ExternalWeatherCard';
 import { PollApiService, Poll } from '../api/pollApi';
 import { View } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -227,6 +228,8 @@ export function PollList({ onViewChange, onPollSelect, onResultsSelect, onDelete
           <p className="mt-0.5 text-sm text-gray-600 dark:text-gray-400">Фильтрация, поиск и сортировка</p>
         </div>
       </div>
+
+      <ExternalWeatherCard />
 
       <div className="grid gap-3 rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
         <div className="flex gap-2">

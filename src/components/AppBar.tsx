@@ -16,6 +16,9 @@ export function AppBar({ onNav, current }: AppBarProps): JSX.Element {
           <img
             src={logo}
             alt="MTUCI"
+            width={132}
+            height={44}
+            decoding="async"
             className="h-11 w-auto flex-shrink-0 object-contain"
           />
           <span className="text-base font-semibold text-gray-900 dark:text-gray-100">MTUCI — честные голосования</span>
