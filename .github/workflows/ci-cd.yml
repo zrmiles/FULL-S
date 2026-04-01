@@ -12,11 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   REGISTRY: ghcr.io
-  IMAGE_BACKEND: ghcr.io/${{ github.repository_owner }}/survey-app-backend
-  IMAGE_FRONTEND: ghcr.io/${{ github.repository_owner }}/survey-app-frontend
-  IMAGE_GATEWAY: ghcr.io/${{ github.repository_owner }}/survey-app-gateway
 
 jobs:
   quality:
@@ -24,16 +20,16 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -62,10 +58,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
@@ -119,7 +115,15 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
+      - name: Compute image names
+        id: image_meta
+        run: |
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          echo "backend=${{ env.REGISTRY }}/${owner}/survey-app-backend" >> "$GITHUB_OUTPUT"
+          echo "frontend=${{ env.REGISTRY }}/${owner}/survey-app-frontend" >> "$GITHUB_OUTPUT"
+          echo "gateway=${{ env.REGISTRY }}/${owner}/survey-app-gateway" >> "$GITHUB_OUTPUT"
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -138,8 +142,8 @@ jobs:
           file: backend/Dockerfile
           push: true
           tags: |
-            ${{ env.IMAGE_BACKEND }}:latest
-            ${{ env.IMAGE_BACKEND }}:sha-${{ github.sha }}
+            ${{ steps.image_meta.outputs.backend }}:latest
+            ${{ steps.image_meta.outputs.backend }}:sha-${{ github.sha }}
 
       - name: Publish frontend image
         uses: docker/build-push-action@v6
@@ -150,8 +154,8 @@ jobs:
             VITE_API_BASE_URL=/api
           push: true
           tags: |
-            ${{ env.IMAGE_FRONTEND }}:latest
-            ${{ env.IMAGE_FRONTEND }}:sha-${{ github.sha }}
+            ${{ steps.image_meta.outputs.frontend }}:latest
+            ${{ steps.image_meta.outputs.frontend }}:sha-${{ github.sha }}
 
       - name: Publish gateway image
         uses: docker/build-push-action@v6
@@ -160,8 +164,8 @@ jobs:
           file: docker/gateway/Dockerfile
           push: true
           tags: |
-            ${{ env.IMAGE_GATEWAY }}:latest
-            ${{ env.IMAGE_GATEWAY }}:sha-${{ github.sha }}
+            ${{ steps.image_meta.outputs.gateway }}:latest
+            ${{ steps.image_meta.outputs.gateway }}:sha-${{ github.sha }}
 
   deploy:
     runs-on: ubuntu-latest
@@ -194,7 +198,6 @@ jobs:
           script: |
             cd ${{ secrets.DEPLOY_PATH }}
             git fetch --all --prune
-            git checkout ${{ github.ref_name }}
-            git pull --ff-only origin ${{ github.ref_name }}
+            git checkout -B ${{ github.ref_name }} origin/${{ github.ref_name }}
             docker compose pull || true
             docker compose up -d --build --remove-orphans

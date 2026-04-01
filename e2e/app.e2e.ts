@@ -209,7 +209,10 @@ test('runs attachment upload and download scenario with mocked storage endpoints
   });
   await page.getByRole('button', { name: 'Прикрепить файл' }).click();
   await expect(page.getByText('notes.txt')).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Скачать' })).toHaveAttribute('href', new RegExp(`${escapeRegExp(apiBaseUrl)}/polls/.*/download`));
+  await expect(page.getByRole('link', { name: 'Скачать' })).toHaveAttribute(
+    'href',
+    /^(https?:\/\/[^/]+)?\/api\/polls\/.*\/download$/
+  );
 
   await page.getByRole('button', { name: 'Удалить' }).click();
   await page.getByRole('button', { name: 'Удалить' }).nth(1).click();
