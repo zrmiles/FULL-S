@@ -1,4 +1,4 @@
-export const API_BASE_URL = 'http://localhost:8000';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 const AUTH_USER_STORAGE_KEY = 'auth:user';
 const AUTH_SESSION_STORAGE_KEY = 'auth:session';
@@ -229,6 +229,11 @@ interface PollAttachmentListResponse {
   items: PollAttachment[];
 }
 
+const normalizeAttachment = (attachment: PollAttachment): PollAttachment => ({
+  ...attachment,
+  downloadUrl: absoluteUrl(attachment.downloadUrl) ?? attachment.downloadUrl,
+});
+
 export interface WeatherSnapshot {
   city: string;
   condition: string;
@@ -380,7 +385,7 @@ export class PollApiService {
 
   static async listPollAttachments(pollId: string): Promise<PollAttachment[]> {
     const response = await ApiClient.request<PollAttachmentListResponse>(`/polls/${pollId}/attachments`);
-    return response.items;
+    return response.items.map(normalizeAttachment);
   }
 
   static async uploadPollAttachment(pollId: string, file: File): Promise<PollAttachment> {
@@ -391,7 +396,7 @@ export class PollApiService {
       body: formData,
     });
     this.clearPollsCache();
-    return payload;
+    return normalizeAttachment(payload);
   }
 
   static async deletePollAttachment(pollId: string, attachmentId: string): Promise<{ status: string }> {

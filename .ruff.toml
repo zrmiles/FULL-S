@@ -1,0 +1,3 @@
+[lint.per-file-ignores]
+"backend/tests/conftest.py" = ["E402"]
+"backend/tests/support/reset_db.py" = ["E402"]

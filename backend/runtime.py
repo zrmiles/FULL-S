@@ -238,6 +238,10 @@ def ensure_poll_columns(db: Session) -> None:
 
 def ensure_vote_constraints(db: Session) -> None:
     """Ensure votes table allows multi-select per variant."""
+    if db.get_bind().dialect.name == "sqlite":
+        # SQLite test environments build the current constraint layout from metadata,
+        # but do not support the ALTER TABLE constraint operations used for Postgres.
+        return
     inspector = inspect(db.get_bind())
     try:
         constraints = {uc.get("name") for uc in inspector.get_unique_constraints("votes")}

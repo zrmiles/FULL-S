@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -16,11 +18,18 @@ from runtime import STATIC_DIR, ensure_minio_bucket, ensure_runtime_schema, logg
 app = FastAPI(title="MTUCI Backend", version="0.1.0")
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-origins = [
+default_origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
     "http://localhost",
     "http://127.0.0.1",
+]
+origins = [
+    origin.strip()
+    for origin in os.getenv("BACKEND_CORS_ORIGINS", ",".join(default_origins)).split(",")
+    if origin.strip()
 ]
 app.add_middleware(
     CORSMiddleware,

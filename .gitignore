@@ -4,11 +4,21 @@ node_modules
 # production builds
 dist
 *.log
+coverage
+test-results
 
 # environment
+.env
+.env.*
+!.env.example
+!.env.ci
 backend/.env
+backend/.env.*
+backend/*.sqlite
+backend/*.db
 
 # python
+backend/__pycache__/
 backend/venv
 backend/.venv
 .venv
@@ -18,6 +28,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
 
 # OS / editors
 .DS_Store

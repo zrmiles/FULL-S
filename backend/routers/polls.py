@@ -2,7 +2,7 @@ import csv
 import io
 import uuid
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Literal, Optional
 
@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from minio.error import S3Error
 from sqlalchemy import asc, desc, func, or_
 from sqlalchemy.orm import Session
+from starlette.background import BackgroundTask
 
 from authz import (
     PERM_POLLS_ASSIGN_OWNER,
@@ -63,18 +64,19 @@ def _sanitize_filename(name: Optional[str]) -> str:
     return safe or "file"
 
 
-def _poll_attachment_download_url(object_name: str) -> str:
-    if not MINIO_CLIENT:
-        raise HTTPException(status_code=503, detail="File storage is not configured")
+def _poll_attachment_download_url(poll_id: str, attachment_id: str) -> str:
+    return f"/polls/{poll_id}/attachments/{attachment_id}/download"
+
+
+def _close_minio_response(response) -> None:
     try:
-        return MINIO_CLIENT.presigned_get_object(
-            MINIO_BUCKET,
-            object_name,
-            expires=timedelta(minutes=15),
-        )
-    except S3Error:
-        logger.exception("Failed to create pre-signed URL for object %s", object_name)
-        raise HTTPException(status_code=502, detail="Failed to generate file URL")
+        response.close()
+    except Exception:
+        pass
+    try:
+        response.release_conn()
+    except Exception:
+        pass
 
 
 def _serialize_attachment(attachment: PollAttachmentModel) -> PollAttachment:
@@ -86,7 +88,7 @@ def _serialize_attachment(attachment: PollAttachmentModel) -> PollAttachment:
         sizeBytes=attachment.size_bytes,
         uploaderUserId=attachment.uploader_user_id,
         createdAt=attachment.created_at.isoformat(),
-        downloadUrl=_poll_attachment_download_url(attachment.object_name),
+        downloadUrl=_poll_attachment_download_url(attachment.poll_id, attachment.id),
     )
 
 
@@ -633,3 +635,39 @@ def delete_poll_attachment(
     db.delete(attachment)
     db.commit()
     return {"status": "ok"}
+
+
+@router.get("/polls/{poll_id}/attachments/{attachment_id}/download")
+def download_poll_attachment(
+    poll_id: str,
+    attachment_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    _ = current_user
+    if not MINIO_CLIENT:
+        raise HTTPException(status_code=503, detail="File storage is not configured")
+
+    attachment = (
+        db.query(PollAttachmentModel)
+        .filter(PollAttachmentModel.id == attachment_id, PollAttachmentModel.poll_id == poll_id)
+        .first()
+    )
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    try:
+        object_response = MINIO_CLIENT.get_object(MINIO_BUCKET, attachment.object_name)
+    except S3Error:
+        logger.exception("Failed to download attachment object %s", attachment.object_name)
+        raise HTTPException(status_code=502, detail="Failed to read file")
+
+    ascii_filename = attachment.original_name.encode("ascii", "ignore").decode() or "attachment"
+    return StreamingResponse(
+        object_response.stream(32 * 1024),
+        media_type=attachment.content_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{ascii_filename}"',
+        },
+        background=BackgroundTask(_close_minio_response, object_response),
+    )

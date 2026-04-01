@@ -3,7 +3,13 @@ from datetime import datetime, timezone
 from urllib.parse import quote
 
 from fastapi import APIRouter, Request, Response
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+
+from database import engine
+import runtime
+from runtime import logger
 
 router = APIRouter(tags=["core"])
 
@@ -37,7 +43,38 @@ def favicon():
 
 @router.get("/health")
 def health():
-    return {"status": "ok", "time": datetime.utcnow().isoformat()}
+    checks = {"database": "unknown", "objectStorage": "disabled"}
+    status_code = 200
+
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        checks["database"] = "ok"
+    except SQLAlchemyError:
+        logger.exception("Healthcheck failed: database unavailable")
+        checks["database"] = "error"
+        status_code = 503
+
+    if runtime.MINIO_CLIENT:
+        try:
+            checks["objectStorage"] = (
+                "ok" if runtime.MINIO_CLIENT.bucket_exists(runtime.MINIO_BUCKET) else "error"
+            )
+            if checks["objectStorage"] == "error":
+                status_code = 503
+        except Exception:
+            logger.exception("Healthcheck failed: object storage unavailable")
+            checks["objectStorage"] = "error"
+            status_code = 503
+
+    return JSONResponse(
+        content={
+            "status": "ok" if status_code == 200 else "degraded",
+            "time": datetime.now(timezone.utc).isoformat(),
+            "checks": checks,
+        },
+        status_code=status_code,
+    )
 
 
 @router.get("/robots.txt", include_in_schema=False)

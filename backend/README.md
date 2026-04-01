@@ -2,6 +2,17 @@
 
 Backend API для приложения голосований, написанный на FastAPI с PostgreSQL.
 
+## Docker
+
+Для backend добавлен production-ready образ [`backend/Dockerfile`](./Dockerfile):
+
+```bash
+docker build -f backend/Dockerfile -t survey-backend .
+docker run --rm -p 8000:8000 --env-file .env survey-backend
+```
+
+Отдельный bootstrap схемы для compose/init-container находится в [`backend/bootstrap.py`](./bootstrap.py) и используется сервисом `backend-migrate`.
+
 ## Установка и запуск
 
 ### 1. Установка зависимостей
@@ -34,33 +45,35 @@ cp env.example .env
 
 Отредактируйте `.env`:
 ```
-DATABASE_URL=postgresql://username:password@localhost:5432/survey_db
+DATABASE_URL=postgresql+psycopg://username:password@localhost:5432/survey_db
 ```
 
 ### 4. Инициализация базы данных
 
 ```bash
-# Создание миграций
-alembic revision --autogenerate -m "Initial migration"
-
-# Применение миграций
-alembic upgrade head
+# Runtime bootstrap схемы
+python bootstrap.py
 ```
 
 ### 5. Запуск сервера
 
 ```bash
-# Разработка
+# Разработка из директории backend
+source ../venv/bin/activate
 uvicorn app:app --reload --port 8000
 
-# Или через npm
+# Или из корня проекта
+source venv/bin/activate
+uvicorn app:app --reload --port 8000 --app-dir backend
+
+# Или через npm из корня
 npm run dev:backend
 ```
 
 ## API Endpoints
 
 - `GET /` - Информация о сервисе
-- `GET /health` - Проверка здоровья
+- `GET /health` - Readiness backend (БД + object storage)
 - `GET /robots.txt` - Правила обхода для поисковых роботов
 - `GET /sitemap.xml` - Sitemap для индексируемых маршрутов
 - `GET /external/weather` - Нормализованные внешние данные погоды (OpenWeatherMap)

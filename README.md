@@ -2,20 +2,71 @@
 
 Приложение состоит из фронтенда (Vite + React + Tailwind) и backend'а на FastAPI, который обращается к PostgreSQL и MinIO для хранения данных и аватаров.
 
+## Контейнеризация
+
+В репозиторий добавлена воспроизводимая контейнерная схема:
+
+- `frontend`: отдельный контейнер со сборкой и раздачей клиентского SPA;
+- `gateway` на Nginx: единая точка входа, проксирует `/api` на FastAPI и web-трафик на frontend;
+- `backend`: FastAPI/uvicorn;
+- `backend-migrate`: одноразовый bootstrap схемы БД перед запуском API;
+- `backend-seed`: одноразовая инициализация стартовых данных;
+- `postgres`: основная БД;
+- `minio` + `minio-init`: объектное хранилище и инициализация bucket.
+
+Подробная схема взаимодействия контейнеров и порядок запуска описаны в [docs/container-architecture.md](./docs/container-architecture.md).
+
+### Быстрый старт через Docker Compose
+
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
+
+После старта сервисы доступны по адресам:
+
+- приложение: `http://localhost:8080`
+- backend API через gateway: `http://localhost:8080/api`
+- MinIO API: `http://localhost:9000`
+- MinIO Console: `http://localhost:9001`
+
+Полезные команды:
+
+```bash
+docker compose ps
+docker compose logs -f
+docker compose down
+```
+
+Важно:
+
+- секреты и локальные env-файлы не должны попадать в git; используйте только `.env.example` как шаблон;
+- для production поменяйте `POSTGRES_PASSWORD`, `MINIO_ROOT_PASSWORD`, `JWT_SECRET`, при необходимости `MINIO_PUBLIC_URL` и `PUBLIC_BASE_URL`;
+- readiness backend завязан на доступность БД и объектного хранилища.
+
 ## Быстрый старт
 
 ```bash
 # установить зависимости фронта
 npm install
 
-# создать виртуальное окружение для backend (один раз)
-cd backend
+# создать виртуальное окружение в корне проекта (один раз)
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 ```
 
 ## Настройка окружения
+
+### Для Docker Compose
+
+1. Создайте `.env` из корневого шаблона:
+   ```bash
+   cp .env.example .env
+   ```
+2. Заполните секреты и при необходимости скорректируйте порты, `PUBLIC_BASE_URL`, `MINIO_PUBLIC_URL`, `WEATHER_API_KEY`.
+
+### Для локального запуска без Docker
 
 1. Создайте файл `backend/.env` на основе `backend/env.example`:
    ```bash
@@ -45,6 +96,14 @@ pip install -r requirements.txt
 
 ## Запуск
 
+### Контейнерный запуск
+
+```bash
+docker compose up -d --build
+```
+
+### Локальный запуск без Docker
+
 Фронтенд:
 ```bash
 npm run dev
@@ -53,12 +112,13 @@ npm run dev
 Backend (из корня проекта):
 ```bash
 source venv/bin/activate
-python -m uvicorn app:app --reload --port 8000
+python -m uvicorn app:app --reload --port 8000 --app-dir backend
 ```
 
 Или из директории `backend`:
 ```bash
-source venv/bin/activate
+cd backend
+source ../venv/bin/activate
 python -m uvicorn app:app --reload --port 8000
 ```
 
@@ -103,3 +163,42 @@ Frontend также учитывает роли:
   - `GET /external/weather` (интеграция OpenWeatherMap через server-side adapter, с retry, timeout, rate limit и cache)
 - На frontend добавлены динамические `title/description/canonical`, OpenGraph/Twitter meta и JSON-LD.
 - Матрица индексируемых/закрытых страниц находится в файле `SEO_SCOPE.md`.
+
+## Комплексное тестирование
+
+В проект добавлена воспроизводимая тестовая инфраструктура для backend, frontend и E2E.
+
+Основные команды:
+
+```bash
+# backend unit + integration
+npm run test:backend
+
+# frontend unit + integration
+npm run test:frontend
+
+# браузерные E2E-сценарии
+npm run test:e2e
+
+# полный прогон
+npm run test:all
+```
+
+Подробная тестовая модель, список критических сценариев, правила именования, thresholds покрытия и описание моков вынесены в [TESTING.md](./TESTING.md).
+
+## CI/CD
+
+Workflow [`.github/workflows/ci-cd.yml`](./.github/workflows/ci-cd.yml) выполняет:
+
+- линтеры (`ruff`, `tsc --noEmit`);
+- backend/frontend тесты;
+- smoke-подъём контейнерного стека и Playwright E2E поверх `docker compose`;
+- публикацию образов `backend`, `frontend`, `gateway` в GHCR при `push` в `main`;
+- автоматический deploy по SSH после успешных проверок, если заданы `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY`, `DEPLOY_PATH`.
+
+Для включения deploy в GitHub нужно добавить secrets:
+
+- `DEPLOY_HOST` — адрес сервера;
+- `DEPLOY_USER` — SSH-пользователь;
+- `DEPLOY_SSH_KEY` — приватный SSH-ключ для доступа к серверу;
+- `DEPLOY_PATH` — путь до каталога проекта на сервере.

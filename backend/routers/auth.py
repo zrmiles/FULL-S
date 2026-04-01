@@ -53,7 +53,7 @@ def register(body: RegisterRequest, db: Session = Depends(get_db), x_admin_token
         db.rollback()
         logger.warning("Registration conflict for %s: %s", body.email, exc)
         raise HTTPException(status_code=409, detail="User with this email or username already exists")
-    except OperationalError as exc:
+    except OperationalError:
         db.rollback()
         logger.exception("Database unavailable during registration for %s", body.email)
         raise HTTPException(status_code=503, detail="Database unavailable")

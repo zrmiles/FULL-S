@@ -9,7 +9,19 @@
     "dev:all": "concurrently -k -n FRONT,API -c blue,green \"npm:dev\" \"npm:dev:backend\"",
     "build": "vite build",
     "preview": "vite preview",
-    "postcss": "tsx postcss.config.ts"
+    "postcss": "tsx postcss.config.ts",
+    "lint": "npm run lint:backend && npm run lint:frontend",
+    "lint:frontend": "tsc --noEmit",
+    "lint:backend": "./venv/bin/python -m ruff check backend",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:all": "npm run test && npm run test:e2e",
+    "test:backend": "./venv/bin/python -m pytest",
+    "test:backend:unit": "./venv/bin/python -m pytest -m unit backend/tests/unit",
+    "test:backend:integration": "./venv/bin/python -m pytest -m integration backend/tests/integration",
+    "test:frontend": "vitest run --coverage",
+    "test:frontend:unit": "vitest run src/auth/rbac.unit.test.ts src/components/views/LoginView.unit.test.tsx src/components/views/PollVotingView.unit.test.tsx",
+    "test:frontend:integration": "vitest run src/api/pollApi.integration.test.ts src/context/AuthContext.integration.test.tsx src/components/PollList.integration.test.tsx",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "lucide-react": "^0.451.0",
@@ -18,17 +30,25 @@
     "react-easy-crop": "^5.0.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/postcss-load-config": "^3.0.1",
     "@types/react": "^18.2.66",
     "@types/react-dom": "^18.2.22",
     "@vitejs/plugin-react": "^5.0.3",
+    "@vitest/coverage-v8": "^4.1.1",
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.2.1",
+    "esbuild": "^0.27.4",
+    "jsdom": "^29.0.1",
     "postcss": "^8.4.41",
     "tailwindcss": "^3.4.18",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.6",
     "typescript": "^5.3.3",
-    "vite": "^5.4.2"
+    "vite": "^5.4.2",
+    "vitest": "^4.1.1"
   }
 }

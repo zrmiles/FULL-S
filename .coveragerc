@@ -1,0 +1,9 @@
+[run]
+source = backend
+omit =
+    */tests/*
+    */bootstrap.py
+    */bootstrap_data.py
+
+[report]
+skip_empty = True

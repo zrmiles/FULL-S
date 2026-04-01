@@ -1,0 +1,181 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+      args:
+        VITE_API_BASE_URL: ${FRONTEND_API_BASE_URL:-/api}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - app_net
+
+  gateway:
+    build:
+      context: .
+      dockerfile: docker/gateway/Dockerfile
+    ports:
+      - "${APP_PORT:-8080}:80"
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - app_net
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      SQLALCHEMY_ECHO: ${SQLALCHEMY_ECHO:-false}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_ISSUER: ${JWT_ISSUER:-survey-app}
+      ACCESS_TOKEN_TTL_MINUTES: ${ACCESS_TOKEN_TTL_MINUTES:-15}
+      REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-14}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_BUCKET: ${MINIO_BUCKET:-avatars}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+      MINIO_PUBLIC_URL: ${MINIO_PUBLIC_URL}
+      WEATHER_API_KEY: ${WEATHER_API_KEY:-}
+      WEATHER_CITY: ${WEATHER_CITY:-Moscow}
+      WEATHER_API_BASE_URL: ${WEATHER_API_BASE_URL:-https://api.openweathermap.org/data/2.5}
+      WEATHER_TIMEOUT_SECONDS: ${WEATHER_TIMEOUT_SECONDS:-4}
+      WEATHER_MAX_RETRIES: ${WEATHER_MAX_RETRIES:-2}
+      WEATHER_RETRY_BACKOFF_SECONDS: ${WEATHER_RETRY_BACKOFF_SECONDS:-0.3}
+      WEATHER_CACHE_TTL_SECONDS: ${WEATHER_CACHE_TTL_SECONDS:-180}
+      WEATHER_RATE_LIMIT_PER_MIN: ${WEATHER_RATE_LIMIT_PER_MIN:-30}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend-migrate:
+        condition: service_completed_successfully
+      backend-seed:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import sys, urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health').status == 200 else 1)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - app_net
+
+  backend-migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "bootstrap.py"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      SQLALCHEMY_ECHO: ${SQLALCHEMY_ECHO:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - app_net
+
+  backend-seed:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "bootstrap_data.py"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      SQLALCHEMY_ECHO: ${SQLALCHEMY_ECHO:-false}
+      IMPORT_SQLITE_PATH: /seed/survey.db
+      SEED_DEMO_DATA_ON_EMPTY: ${SEED_DEMO_DATA_ON_EMPTY:-true}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend-migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ./backend/survey.db:/seed/survey.db:ro
+    restart: "no"
+    networks:
+      - app_net
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-survey_db}
+      POSTGRES_USER: ${POSTGRES_USER:-survey_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-survey_user} -d ${POSTGRES_DB:-survey_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - app_net
+
+  minio:
+    image: minio/minio:RELEASE.2025-02-28T09-55-16Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - app_net
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-03-12T17-29-24Z
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+          until mc alias set local http://minio:9000 "${MINIO_ROOT_USER:-minioadmin}" "${MINIO_ROOT_PASSWORD}"; do
+            sleep 2
+          done
+          mc mb --ignore-existing "local/${MINIO_BUCKET:-avatars}"
+          mc anonymous set download "local/${MINIO_BUCKET:-avatars}"
+    depends_on:
+      - minio
+    restart: "no"
+    networks:
+      - app_net
+
+volumes:
+  postgres_data:
+  minio_data:
+
+networks:
+  app_net:
+    driver: bridge
