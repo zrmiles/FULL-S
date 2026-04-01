@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const e2eDbPath = path.join(rootDir, 'backend', 'e2e.sqlite');
 const apiBaseUrl = process.env.PLAYWRIGHT_API_BASE_URL || 'http://127.0.0.1:8010';
+const shouldManageServers = process.env.PLAYWRIGHT_EXTERNAL_SERVER !== '1';
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const sharedEnv = {
   ...process.env,
@@ -53,7 +54,9 @@ async function login(page: Page, request: APIRequestContext, username: string, p
 }
 
 test.beforeEach(() => {
-  resetDb();
+  if (shouldManageServers) {
+    resetDb();
+  }
 });
 
 test('supports login, session restore and logout', async ({ page, request }) => {

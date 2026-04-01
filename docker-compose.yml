@@ -116,8 +116,6 @@ services:
         condition: service_healthy
       backend-migrate:
         condition: service_completed_successfully
-    volumes:
-      - ./backend/survey.db:/seed/survey.db:ro
     restart: "no"
     networks:
       - app_net
